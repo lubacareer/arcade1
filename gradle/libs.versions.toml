@@ -1,0 +1,15 @@
+[versions]
+kotlin = "2.4.21"
+agp = "9.3.3"
+gdx = "1.14.2"
+junit = "5.11.4"
+serialization = "1.9.0"
+[libraries]
+gdx = { module = "com.badlogicgames.gdx:gdx", version.ref = "gdx" }
+gdx-android = { module = "com.badlogicgames.gdx:gdx-backend-android", version.ref = "gdx" }
+gdx-lwjgl3 = { module = "com.badlogicgames.gdx:gdx-backend-lwjgl3", version.ref = "gdx" }
+junit = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+android-application = { id = "com.android.application", version.ref = "agp" }

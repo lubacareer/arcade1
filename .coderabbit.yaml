@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "simulation/**"
+      instructions: "Review deterministic fixed-step physics, swept collisions, score-once rules, finite state, campaign reward idempotency, save durability and pointer ownership. Compare tests with actual behavior."
+    - path: "android/**"
+      instructions: "Review lifecycle, audio focus, insets, API 26 compatibility, release shrinking and native library packaging. The app must remain fully offline, without ads or billing."
+    - path: "game/**"
+      instructions: "Review input routing, UI state transitions, resource disposal and accessibility settings. Local versus must ignore campaign upgrades."
