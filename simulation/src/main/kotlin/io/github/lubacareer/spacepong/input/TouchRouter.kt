@@ -26,6 +26,8 @@ class TouchRouter(
     private var rightPulseArea: TouchRect? = null
     private var leftPulsePending = false
     private var rightPulsePending = false
+    private var leftPulseEnabled = true
+    private var rightPulseEnabled = true
 
     var leftTargetY: Float? = null
         private set
@@ -53,6 +55,7 @@ class TouchRouter(
             localVersus -> Action.RIGHT_DRAG
             else -> return false
         }
+        if (action == Action.LEFT_PULSE && !leftPulseEnabled || action == Action.RIGHT_PULSE && !rightPulseEnabled) return false
         if (captures.values.any { it.action == action }) return false
         val offset = when (action) {
             Action.LEFT_DRAG -> y - leftPaddleY
@@ -86,6 +89,24 @@ class TouchRouter(
             Action.RIGHT_DRAG -> rightTargetY = null
             else -> Unit
         }
+    }
+
+    /** OS cancellation invalidates the captured action; ordinary up preserves quick taps. */
+    fun cancel(pointer: Int) {
+        when (captures.remove(pointer)?.action) {
+            Action.LEFT_DRAG -> leftTargetY = null
+            Action.RIGHT_DRAG -> rightTargetY = null
+            Action.LEFT_PULSE -> leftPulsePending = false
+            Action.RIGHT_PULSE -> rightPulsePending = false
+            null -> Unit
+        }
+    }
+
+    fun setPulseEnabled(left: Boolean, right: Boolean = false) {
+        leftPulseEnabled = left
+        rightPulseEnabled = right
+        if (!left) leftPulsePending = false
+        if (!right) rightPulsePending = false
     }
 
     fun cancelAll() {

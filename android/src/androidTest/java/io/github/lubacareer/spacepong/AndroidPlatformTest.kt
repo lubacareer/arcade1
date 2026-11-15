@@ -9,10 +9,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import com.badlogic.gdx.Gdx
 import io.github.lubacareer.spacepong.game.UiTarget
+import io.github.lubacareer.spacepong.progression.CampaignProgression
+import io.github.lubacareer.spacepong.progression.CampaignSave
+import io.github.lubacareer.spacepong.progression.SaveRepository
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -73,6 +78,49 @@ class AndroidPlatformTest {
                 "Safe-area change did not move controls: before=$before, after=$after, insetsBefore=$beforeInsets, insetsAfter=${app.safeInsets()}",
                 after.x > before.x + 20f,
             )
+        }
+    }
+
+    @Test
+    fun regainingWindowFocusRestoresMenuAudioWhenAudioFocusWasRetained() {
+        ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
+            lateinit var app: AndroidLauncher
+            scenario.onActivity { app = it }
+            firstTarget(app)
+            scenario.onActivity { it.onWindowFocusChanged(true) }
+            assertTrue("Foreground activity should hold audio focus", app.hasAudioFocus())
+            scenario.onActivity { it.onWindowFocusChanged(false) }
+            assertTrue("Window interruption should suspend menu audio", onGame { audioSuspended(app) })
+            assertTrue("Window focus loss alone should retain audio focus", app.hasAudioFocus())
+            scenario.onActivity { it.onWindowFocusChanged(true) }
+            assertFalse("Window focus regain should reactivate menu audio", onGame { audioSuspended(app) })
+        }
+    }
+
+    private fun audioSuspended(app: AndroidLauncher): Boolean {
+        val audioField = app.game.javaClass.getDeclaredField("audio").apply { isAccessible = true }
+        val audio = audioField.get(app.game)
+        val suspendedField = audio.javaClass.getDeclaredField("suspended").apply { isAccessible = true }
+        return suspendedField.getBoolean(audio)
+    }
+
+    @Test
+    fun deviceFilesystemSupportsFlushedCampaignReplacements() {
+        ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
+            lateinit var app: AndroidLauncher
+            scenario.onActivity { app = it }
+            val directory = Files.createTempDirectory(app.cacheDir.toPath(), "campaign-sync-")
+            try {
+                assertTrue("Android saves should use directory fsync", "posix" in directory.fileSystem.supportedFileAttributeViews())
+                val repo = SaveRepository(directory)
+                val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
+                val second = CampaignProgression.recordVictory(first, 0, 0)
+                repo.save(first)
+                repo.save(second)
+                assertEquals(second, SaveRepository(directory).load().save)
+            } finally {
+                directory.toFile().deleteRecursively()
+            }
         }
     }
 }

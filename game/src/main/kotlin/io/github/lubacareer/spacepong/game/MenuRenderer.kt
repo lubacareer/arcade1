@@ -30,7 +30,6 @@ data class ResultSummary(
 class MenuRenderer(private val canvas: Canvas) {
     val buttons = mutableListOf<MenuButton>()
     private var focused = -1
-    private var textScale = 1f
     private val names = arrayOf("Flight School", "Asteroid Passage", "Gravity Relay", "The Warden")
     private val labels = arrayOf("LEARN THE SIGNAL", "THREAD THE DEBRIS", "BEND THE ORBIT", "BREAK THE SILENCE")
 
@@ -45,7 +44,7 @@ class MenuRenderer(private val canvas: Canvas) {
     ) {
         buttons.clear()
         focused = focus
-        textScale = if (save.settings.largeText) 1.12f else 1f
+        canvas.configureAccessibility(save.settings.largeText, save.settings.highContrast)
         when (page) {
             Page.START -> start(save, time)
             Page.MAP -> map(save, readOnly)
@@ -91,8 +90,8 @@ class MenuRenderer(private val canvas: Canvas) {
         canvas.centered(
             title,
             x + width / 2,
-            y + height / 2 + 14f * textScale,
-            22f * textScale,
+            y + height / 2 + canvas.scaledTextSize(14f),
+            22f,
             if (primary) {
                 Palette.background
             } else if (enabled) {
@@ -101,6 +100,7 @@ class MenuRenderer(private val canvas: Canvas) {
                 Palette.muted
             },
             true,
+            maxWidth = width - 16f,
         )
         buttons += MenuButton(id, x, y, width, height, title, enabled, primary)
     }
@@ -159,7 +159,7 @@ class MenuRenderer(private val canvas: Canvas) {
             canvas.rounded(x, 188f, 272f, 340f, 18f, Palette.panel, if (unlocked) 1f else .5f)
             canvas.text("0${i + 1}", x + 22f, 478f, 18f, if (unlocked) Palette.cyan else Palette.muted, true)
             symbol(i, x + 136f, 425f, if (unlocked) Palette.cyan else Palette.line)
-            canvas.centered(names[i], x + 136f, 362f, 23f, if (unlocked) Palette.ink else Palette.muted, true)
+            canvas.centered(names[i], x + 136f, 362f, 23f, if (unlocked) Palette.ink else Palette.muted, true, maxWidth = 248f)
             canvas.centered(labels[i], x + 136f, 328f, 12f, Palette.muted)
             for (m in 0..2) {
                 canvas.circle(

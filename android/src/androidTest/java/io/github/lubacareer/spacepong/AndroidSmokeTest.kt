@@ -104,12 +104,13 @@ class AndroidSmokeTest {
             tap(app, "local")
             awaitPage(app, "MATCH")
             val playingDeadline = SystemClock.uptimeMillis() + 15000
-            while (onGame { app.game.diagnostics().matchPhase } != "PLAYING" && SystemClock.uptimeMillis() < playingDeadline) {
+            var inputSnapshot = onGame { app.game.diagnostics() to app.game.uiTargets() }
+            while (inputSnapshot.first.matchPhase != "PLAYING" && SystemClock.uptimeMillis() < playingDeadline) {
                 SystemClock.sleep(50)
+                inputSnapshot = onGame { app.game.diagnostics() to app.game.uiTargets() }
             }
-            assertEquals("PLAYING", onGame { app.game.diagnostics().matchPhase })
-            val before = onGame { app.game.diagnostics() }
-            val targets = onGame { app.game.uiTargets() }
+            val (before, targets) = inputSnapshot
+            assertEquals("PLAYING", before.matchPhase)
             val leftPulse = targets.first { it.id == "pulse-left" }
             val rightPulse = targets.first { it.id == "pulse-right" }
             val xs = floatArrayOf(
@@ -132,12 +133,21 @@ class AndroidSmokeTest {
             ys[0] = device.displayHeight * .3f
             ys[1] = device.displayHeight * .7f
             inject(downTime, MotionEvent.ACTION_MOVE, xs, ys, 4)
-            SystemClock.sleep(250)
-            val after = onGame { app.game.diagnostics() }
-            assertTrue("Left drag must move its paddle", after.leftPaddleY > before.leftPaddleY + 30)
-            assertTrue("Right drag must move its paddle", after.rightPaddleY < before.rightPaddleY - 30)
-            assertTrue("Left Pulse must activate", after.leftPulseCooldown > 0)
-            assertTrue("Right Pulse must activate", after.rightPulseCooldown > 0)
+            // Input is processed after posted GL runnables. A slow software renderer may
+            // not consume the injected events within a fixed wall-clock sleep.
+            val inputDeadline = SystemClock.uptimeMillis() + 10000
+            var after = onGame { app.game.diagnostics() }
+            fun inputObserved() = after.leftPaddleY > before.leftPaddleY + 30 &&
+                after.rightPaddleY < before.rightPaddleY - 30 &&
+                after.leftPulseCooldown > 0 && after.rightPulseCooldown > 0
+            while (!inputObserved() && after.page == "MATCH" && SystemClock.uptimeMillis() < inputDeadline) {
+                SystemClock.sleep(50)
+                after = onGame { app.game.diagnostics() }
+            }
+            assertTrue("Left drag must move its paddle: $before -> $after", after.leftPaddleY > before.leftPaddleY + 30)
+            assertTrue("Right drag must move its paddle: $before -> $after", after.rightPaddleY < before.rightPaddleY - 30)
+            assertTrue("Left Pulse must activate: $after", after.leftPulseCooldown > 0)
+            assertTrue("Right Pulse must activate: $after", after.rightPulseCooldown > 0)
             inject(downTime, MotionEvent.ACTION_CANCEL, xs, ys, 4)
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)

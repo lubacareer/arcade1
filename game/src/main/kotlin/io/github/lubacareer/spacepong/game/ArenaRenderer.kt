@@ -57,7 +57,8 @@ class ArenaRenderer(private val canvas: Canvas) {
         previousTick = -1
     }
 
-    fun draw(state: MatchState, alpha: Float, delta: Float, settings: GameSettings, local: Boolean, tutorial: Int, tutorialGhostY: Float = 360f) {
+    fun draw(state: MatchState, alpha: Float, delta: Float, settings: GameSettings, local: Boolean, tutorial: Int, tutorialGhostY: Float = 360f, tutorialPulseProgress: Float = -1f) {
+        canvas.configureAccessibility(settings.largeText, settings.highContrast)
         val ballX = lerp(state.ball.previousX, state.ball.x, alpha)
         val ballY = lerp(state.ball.previousY, state.ball.y, alpha)
         if (state.tick != previousTick) {
@@ -91,29 +92,40 @@ class ArenaRenderer(private val canvas: Canvas) {
         paddle(state.left, alpha, Palette.cyan, settings)
         paddle(state.right, alpha, if (settings.highContrast) Palette.amber else Palette.pink, settings)
         particles(delta, settings)
-        hud(state, local, settings)
+        hud(state, local, settings, tutorial)
         if (state.phase == MatchPhase.COUNTDOWN && tutorial == 0) {
             canvas.circle(640f, 360f, 58f, Palette.background, .9f)
             canvas.centered(ceil(state.countdownSeconds).toInt().coerceAtLeast(1).toString(), 640f, 395f, 60f, Palette.ink, true)
             canvas.centered("GET READY", 640f, 278f, 16f, Palette.cyan, true)
         }
         if (tutorial > 0) {
-            practiceHologram(tutorialGhostY, state.left.height.toFloat())
+            practiceHologram(tutorialGhostY, state.left.height.toFloat(), tutorialPulseProgress)
             canvas.rounded(378f, 222f, 524f, 238f, 20f, Palette.panel, .96f)
-            canvas.centered("FLIGHT SCHOOL / $tutorial OF 2", 640f, 433f, 17f, Palette.cyan, true)
-            canvas.centered(if (tutorial == 1) "Steer the hologram" else "Arm a Pulse Return", 640f, 385f, 32f, Palette.ink, true)
+            canvas.centered(if (tutorial == 3) "PULSE DEMONSTRATION" else "FLIGHT SCHOOL / $tutorial OF 2", 640f, 433f, 17f, Palette.cyan, true)
+            canvas.centered(
+                when (tutorial) {
+                    1 -> "Steer the hologram"
+                    2 -> "Arm a Pulse Return"
+                    else -> "Pulse in action"
+                },
+                640f,
+                385f,
+                32f,
+                Palette.ink,
+                true,
+            )
             canvas.wrap(
-                if (tutorial == 1) {
-                    "Drag on the left to move the hologram. W / S on keyboard."
-                } else {
-                    "Tap PULSE on the right. Time it just before a return. Keyboard: left Shift."
+                when (tutorial) {
+                    1 -> "Drag on the left to move the hologram. W / S on keyboard."
+                    2 -> "Tap PULSE to see a boosted return. Keyboard: left Shift."
+                    else -> "Arm before contact. The next return gets a speed boost."
                 },
                 415f,
                 329f,
                 450f,
                 22f,
             )
-            canvas.centered("Move / Pulse to continue, or tap SKIP.", 640f, 250f, 16f, Palette.muted)
+            canvas.centered(if (tutorial == 3) "Launching flight after the demonstration..." else "Move / Pulse to continue, or tap SKIP.", 640f, 250f, 16f, Palette.muted)
         }
         // The ball is always the final arena shape so HUD/control effects never hide it.
         if (state.phase == MatchPhase.PLAYING || state.phase == MatchPhase.COUNTDOWN) {
@@ -130,17 +142,38 @@ class ArenaRenderer(private val canvas: Canvas) {
         }
     }
 
-    private fun practiceHologram(y: Float, height: Float) {
+    private fun practiceHologram(y: Float, height: Float, pulseProgress: Float) {
         val x = 106f
+        val hologramColor = if (pulseProgress >= 0f) Palette.amber else Palette.cyan
         canvas.line(x, 60f, x, 660f, 1f, Palette.cyan, .15f)
-        canvas.line(x - 9f, y - height / 2, x + 9f, y - height / 2, 2f, Palette.cyan, .85f)
-        canvas.line(x - 9f, y + height / 2, x + 9f, y + height / 2, 2f, Palette.cyan, .85f)
+        canvas.line(x - 9f, y - height / 2, x + 9f, y - height / 2, 2f, hologramColor, .85f)
+        canvas.line(x - 9f, y + height / 2, x + 9f, y + height / 2, 2f, hologramColor, .85f)
         for (segment in 0 until 6) {
             val bottom = y - height / 2 + segment * height / 6
-            canvas.line(x - 9f, bottom, x - 9f, bottom + height / 10, 2f, Palette.cyan, .85f)
-            canvas.line(x + 9f, bottom, x + 9f, bottom + height / 10, 2f, Palette.cyan, .85f)
+            canvas.line(x - 9f, bottom, x - 9f, bottom + height / 10, 2f, hologramColor, .85f)
+            canvas.line(x + 9f, bottom, x + 9f, bottom + height / 10, 2f, hologramColor, .85f)
         }
-        canvas.text("PRACTICE", x + 23f, (y + 12f).coerceIn(80f, 608f), 16f, Palette.cyan, true)
+        canvas.text(
+            if (pulseProgress >= .5f) {
+                "BOOSTED RETURN"
+            } else if (pulseProgress >= 0f) {
+                "PULSE ARMED"
+            } else {
+                "PRACTICE"
+            },
+            x + 23f,
+            (y + height / 2 + 32f).coerceIn(110f, 608f),
+            16f,
+            hologramColor,
+            true,
+        )
+        if (pulseProgress >= 0f) {
+            val incoming = pulseProgress < .5f
+            val ballX = if (incoming) x + 170f * (1f - pulseProgress / .5f) else x + 240f * ((pulseProgress - .5f) / .5f)
+            val ballY = y.coerceIn(24f, 696f)
+            if (!incoming) canvas.line(x + 12f, ballY, ballX, ballY, 3f, Palette.amber, .6f)
+            canvas.circle(ballX, ballY, 10f, if (incoming) Palette.ink else Palette.amber)
+        }
     }
 
     private fun paddle(p: PaddleState, alpha: Float, color: com.badlogic.gdx.graphics.Color, settings: GameSettings) {
@@ -163,8 +196,18 @@ class ArenaRenderer(private val canvas: Canvas) {
                 val active = bumper.active
                 val warning = state.hazardPhase == HazardPhase.WARNING
                 if (active || warning) {
-                    canvas.circle(x, y, 32f, if (active) Palette.amber else Palette.line, if (active) .8f else .3f)
-                    canvas.ring(x, y, if (warning) 44f else 33f, Palette.amber, if (warning) .6f else 1f, 2f)
+                    canvas.circle(
+                        x,
+                        y,
+                        32f,
+                        if (active) Palette.amber else Palette.line,
+                        if (active) {
+                            if (settings.highContrast) 1f else .8f
+                        } else {
+                            .3f
+                        },
+                    )
+                    canvas.ring(x, y, if (warning) 44f else 33f, Palette.amber, if (warning && !settings.highContrast) .6f else 1f, if (settings.highContrast) 3f else 2f)
                     canvas.line(x - 12, y - 6, x + 9, y + 14, 3f, Palette.background)
                     canvas.circle(x - 12, y + 12, 6f, Palette.background, .7f)
                 } else {
@@ -180,16 +223,28 @@ class ArenaRenderer(private val canvas: Canvas) {
                     640f,
                     360f,
                     i * 37.5f,
-                    if (active || warning) Palette.pink else Palette.line,
-                    if (active) .45f else .2f,
-                    if (settings.highContrast) 2f else 1f,
+                    if (warning && settings.highContrast) {
+                        Palette.amber
+                    } else if (active || warning) {
+                        Palette.pink
+                    } else {
+                        Palette.line
+                    },
+                    if (settings.highContrast) {
+                        if (active || warning) .9f else .35f
+                    } else if (active) {
+                        .45f
+                    } else {
+                        .2f
+                    },
+                    if (settings.highContrast) 3f else 1f,
                 )
             }
             if (warning) canvas.centered("GRAVITY INCOMING", 640f, 185f, 15f, Palette.amber, true)
         }
     }
 
-    private fun hud(state: MatchState, local: Boolean, settings: GameSettings) {
+    private fun hud(state: MatchState, local: Boolean, settings: GameSettings, tutorial: Int) {
         canvas.rounded(370f, 632f, 540f, 72f, 12f, Palette.background, .86f)
         val left = if (state.isBoss) state.leftHull else state.leftScore
         val right = if (state.isBoss) state.rightHull else state.rightScore
@@ -212,18 +267,47 @@ class ArenaRenderer(private val canvas: Canvas) {
         canvas.rounded(pauseButton.x, pauseButton.y, pauseButton.width, pauseButton.height, 12f, Palette.panel, .85f)
         canvas.centered("PAUSE", pauseButton.x + pauseButton.width / 2, pauseButton.y + 60f, 20f, Palette.ink, true)
         if (local) {
-            pulse(versusLeftPulse, state.left, Palette.cyan, settings)
-            pulse(versusRightPulse, state.right, Palette.pink, settings)
+            pulse(versusLeftPulse, state.left, Palette.cyan, settings, state.phase, tutorial)
+            pulse(versusRightPulse, state.right, Palette.pink, settings, state.phase, tutorial)
         } else {
-            pulse(soloPulse, state.left, Palette.cyan, settings)
+            pulse(soloPulse, state.left, Palette.cyan, settings, state.phase, tutorial)
         }
     }
 
-    private fun pulse(button: MenuButton, p: PaddleState, color: com.badlogic.gdx.graphics.Color, settings: GameSettings) {
-        val armed = p.pulseArmedSeconds > 0
-        val ready = p.pulseCooldownSeconds <= 0
-        canvas.rounded(button.x, button.y, button.width, button.height, 20f, if (armed) Palette.amber else Palette.panel, .85f)
-        canvas.ring(button.x + button.width / 2, button.y + 81, 24f, if (armed) Palette.background else color, if (ready || armed) 1f else .35f, 2f)
+    private fun pulse(
+        button: MenuButton,
+        p: PaddleState,
+        color: com.badlogic.gdx.graphics.Color,
+        settings: GameSettings,
+        phase: MatchPhase,
+        tutorial: Int,
+    ) {
+        val control = PulseControlUi.create(phase, tutorial, p.pulseArmedSeconds, p.pulseCooldownSeconds)
+        val armed = control.emphasized
+        val visibleAlpha = if (control.enabled || armed) {
+            1f
+        } else if (settings.highContrast) {
+            .65f
+        } else {
+            .35f
+        }
+        canvas.rounded(
+            button.x,
+            button.y,
+            button.width,
+            button.height,
+            20f,
+            if (armed) Palette.amber else Palette.panel,
+            if (settings.highContrast) 1f else .85f,
+        )
+        canvas.ring(
+            button.x + button.width / 2,
+            button.y + 81,
+            24f,
+            if (armed) Palette.background else color,
+            visibleAlpha,
+            if (settings.highContrast) 3f else 2f,
+        )
         canvas.triangle(
             button.x + 83,
             button.y + 93,
@@ -232,24 +316,17 @@ class ArenaRenderer(private val canvas: Canvas) {
             button.x + 83,
             button.y + 69,
             if (armed) Palette.background else color,
-            if (ready || armed) 1f else .35f,
+            visibleAlpha,
         )
-        val label = if (armed) {
-            "ARMED"
-        } else if (ready) {
-            "PULSE"
-        } else {
-            "%.1fs".format(java.util.Locale.ROOT, p.pulseCooldownSeconds)
-        }
         canvas.centered(
-            label,
+            control.label,
             button.x + button.width / 2,
             button.y + 41,
-            if (settings.largeText) 22f else 19f,
+            19f,
             if (armed) Palette.background else color,
             true,
         )
-        if (!ready) {
+        if (p.pulseCooldownSeconds > 0 && phase == MatchPhase.PLAYING) {
             canvas.rect(
                 button.x + 18f,
                 button.y + 12f,

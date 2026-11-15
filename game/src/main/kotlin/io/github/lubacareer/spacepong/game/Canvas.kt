@@ -36,6 +36,7 @@ class Canvas {
     private val cornerCos = FloatArray(49) { cos(it * Math.PI / 24).toFloat() }
     private val cornerSin = FloatArray(49) { sin(it * Math.PI / 24).toFloat() }
     private var drawing = 0
+    private var style = PresentationStyle()
     private val random = Random(321)
     private val stars = FloatArray(160 * 4).also { array ->
         for (i in 0 until 160) {
@@ -50,6 +51,14 @@ class Canvas {
         body.region.texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
         display.region.texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
     }
+
+    fun configureAccessibility(largeText: Boolean, highContrast: Boolean) {
+        if (style.largeText != largeText || style.highContrast != highContrast) {
+            style = PresentationStyle(largeText, highContrast)
+        }
+    }
+
+    fun scaledTextSize(base: Float): Float = style.fontSize(base)
 
     fun projection(matrix: Matrix4) {
         finish()
@@ -81,14 +90,14 @@ class Canvas {
 
     fun rect(x: Float, y: Float, width: Float, height: Float, color: Color, alpha: Float = 1f) {
         geometry()
-        shapes.color = tint.set(color).mul(1f, 1f, 1f, alpha)
+        shapes.color = tint.set(style.color(color)).mul(1f, 1f, 1f, alpha)
         shapes.rect(x, y, width, height)
     }
 
     fun rounded(x: Float, y: Float, width: Float, height: Float, radius: Float, color: Color, alpha: Float = 1f) {
         if (width <= 0f || height <= 0f) return
         geometry()
-        shapes.color = tint.set(color).mul(1f, 1f, 1f, alpha)
+        shapes.color = tint.set(style.color(color)).mul(1f, 1f, 1f, alpha)
         val r = radius.coerceIn(0f, minOf(width, height) / 2f)
         if (r == 0f) {
             shapes.rect(x, y, width, height)
@@ -117,19 +126,19 @@ class Canvas {
 
     fun circle(x: Float, y: Float, radius: Float, color: Color, alpha: Float = 1f) {
         geometry()
-        shapes.color = tint.set(color).mul(1f, 1f, 1f, alpha)
+        shapes.color = tint.set(style.color(color)).mul(1f, 1f, 1f, alpha)
         shapes.circle(x, y, radius, 48)
     }
 
     fun line(x1: Float, y1: Float, x2: Float, y2: Float, thickness: Float, color: Color, alpha: Float = 1f) {
         geometry()
-        shapes.color = tint.set(color).mul(1f, 1f, 1f, alpha)
+        shapes.color = tint.set(style.color(color)).mul(1f, 1f, 1f, alpha)
         shapes.rectLine(x1, y1, x2, y2, thickness)
     }
 
     fun triangle(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float, color: Color, alpha: Float = 1f) {
         geometry()
-        shapes.color = tint.set(color).mul(1f, 1f, 1f, alpha)
+        shapes.color = tint.set(style.color(color)).mul(1f, 1f, 1f, alpha)
         shapes.triangle(x1, y1, x2, y2, x3, y3)
     }
 
@@ -152,34 +161,49 @@ class Canvas {
     fun text(value: String, x: Float, top: Float, size: Float = 24f, color: Color = Palette.ink, bold: Boolean = false) {
         typography()
         val font = if (bold) display else body
-        font.data.setScale(size / if (bold) 96f else 48f)
-        font.color = color
+        font.data.setScale(style.fontSize(size) / if (bold) 96f else 48f)
+        font.color = style.color(color)
         font.draw(batch, value, x, top)
     }
 
-    fun centered(value: String, x: Float, top: Float, size: Float = 24f, color: Color = Palette.ink, bold: Boolean = false) {
+    fun centered(
+        value: String,
+        x: Float,
+        top: Float,
+        size: Float = 24f,
+        color: Color = Palette.ink,
+        bold: Boolean = false,
+        maxWidth: Float = Float.POSITIVE_INFINITY,
+    ) {
         val font = if (bold) display else body
-        font.data.setScale(size / if (bold) 96f else 48f)
+        val fontBase = if (bold) 96f else 48f
+        font.data.setScale(style.fontSize(size) / fontBase)
         glyph.setText(font, value)
-        text(value, x - glyph.width / 2f, top, size, color, bold)
+        if (maxWidth > 0f && glyph.width > maxWidth) {
+            font.data.setScale(font.data.scaleX * maxWidth / glyph.width)
+            glyph.setText(font, value)
+        }
+        typography()
+        font.color = style.color(color)
+        font.draw(batch, value, x - glyph.width / 2f, top)
     }
 
     fun wrap(value: String, x: Float, top: Float, width: Float, size: Float = 22f, color: Color = Palette.muted) {
         typography()
-        body.data.setScale(size / 48f)
-        body.color = color
+        body.data.setScale(style.fontSize(size) / 48f)
+        body.color = style.color(color)
         body.draw(batch, value, x, top, width, com.badlogic.gdx.utils.Align.left, true)
     }
 
     fun background(time: Float, reducedMotion: Boolean, lowEffects: Boolean) {
         rect(0f, 0f, 1280f, 720f, Palette.background)
-        if (!lowEffects) {
+        if (!lowEffects && !style.highContrast) {
             circle(1080f, 580f, 350f, Palette.cyan, .012f)
             circle(180f, 80f, 290f, Palette.pink, .014f)
             for (i in 0..10) line(i * 128f, 0f, i * 128f, 720f, 1f, Palette.line, .15f)
             for (i in 0..6) line(0f, i * 120f, 1280f, i * 120f, 1f, Palette.line, .15f)
         }
-        for (i in 0 until if (lowEffects) 55 else 160) {
+        for (i in 0 until if (lowEffects || style.highContrast) 55 else 160) {
             val offset = if (reducedMotion) 0f else time * (2f + stars[i * 4 + 2])
             val x = (stars[i * 4] + offset) % 1280
             circle(x, stars[i * 4 + 1], stars[i * 4 + 2], Palette.ink, stars[i * 4 + 3] * .5f)

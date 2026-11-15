@@ -78,4 +78,39 @@ class TouchRouterTest {
         assertFalse(router.down(3, 800f, 100f, 360f, 360f))
         assertFalse(router.down(4, 100f, Float.POSITIVE_INFINITY, 360f, 360f))
     }
+
+    @Test
+    fun `canceling a pulse removes only that pointer's queued action`() {
+        val router = TouchRouter(localVersus = true)
+        router.pulseAreas(TouchRect(100f, 0f, 100f, 100f), TouchRect(1000f, 0f, 100f, 100f))
+        router.down(1, 150f, 50f, 360f, 360f)
+        router.down(2, 1050f, 50f, 360f, 360f)
+        router.cancel(1)
+        assertFalse(router.consumeLeftPulse())
+        assertTrue(router.consumeRightPulse())
+        assertFalse(router.move(1, 200f, 100f))
+    }
+
+    @Test
+    fun `ordinary quick tap release still preserves its queued pulse`() {
+        val router = TouchRouter(localVersus = false)
+        router.pulseAreas(TouchRect(1000f, 0f, 120f, 120f))
+        router.down(1, 1050f, 50f, 360f, 360f)
+        router.up(1)
+        assertTrue(router.consumeLeftPulse())
+    }
+
+    @Test
+    fun `disabled pulse areas reject new actions and discard queued unavailable actions`() {
+        val router = TouchRouter(localVersus = true)
+        router.pulseAreas(TouchRect(100f, 0f, 100f, 100f), TouchRect(1000f, 0f, 100f, 100f))
+        router.down(1, 150f, 50f, 360f, 360f)
+        router.setPulseEnabled(false, true)
+        assertFalse(router.consumeLeftPulse())
+        router.up(1)
+        assertFalse(router.down(3, 150f, 50f, 360f, 360f))
+        assertNull(router.leftTargetY)
+        assertTrue(router.down(4, 1050f, 50f, 360f, 360f))
+        assertTrue(router.consumeRightPulse())
+    }
 }

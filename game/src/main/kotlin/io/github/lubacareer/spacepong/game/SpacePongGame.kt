@@ -33,6 +33,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private var notice: String? = null
     private lateinit var commits: PendingCampaignCommit
     private lateinit var settingsCommit: CampaignSettingsCommit
+    private var pendingReset: CampaignSave? = null
     private val pendingSave: CampaignSave? get() = commits.pending
     private var engine: MatchEngine? = null
     private var runner: FixedStepRunner? = null
@@ -58,7 +59,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         audio = GameAudio { platform.hasAudioFocus() }
         repository = SaveRepository(platform.saveDirectory.toPath())
         commits = PendingCampaignCommit { repository.save(it) }
-        settingsCommit = CampaignSettingsCommit(commits::attempt, audio::apply, platform::setHighRefresh)
+        settingsCommit = CampaignSettingsCommit({ next -> commits.attempt(save, next) }, audio::apply, platform::setHighRefresh)
         try {
             val loaded = repository.load()
             save = loaded.save
@@ -98,6 +99,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
         viewport.apply()
         canvas.projection(camera.combined)
+        canvas.configureAccessibility(save.settings.largeText, save.settings.highContrast)
         canvas.background(elapsed, save.settings.reducedMotion, save.settings.lowEffects)
         val currentEngine = engine
         if ((flow.page == Page.MATCH || flow.page == Page.PAUSE) && currentEngine != null) {
@@ -112,6 +114,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                 local,
                 if (flow.page == Page.MATCH) tutorial else 0,
                 drill?.ghostY ?: 360f,
+                drill?.pulseDemoProgress ?: -1f,
             )
             canvas.projection(camera.combined)
         }
@@ -124,7 +127,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         } else {
             menus.render(flow.page, save, flow.focused, result, notice, readOnly, elapsed)
             currentButtons = menus.buttons
-            if (pendingSave != null) {
+            if (commits.canRetry) {
                 canvas.rounded(retrySave.x, retrySave.y, retrySave.width, retrySave.height, 12f, Palette.amber)
                 canvas.centered("RETRY SAVE", retrySave.x + retrySave.width / 2, retrySave.y + 46, 21f, Palette.background, true)
                 currentButtons = menus.buttons + retrySave
@@ -138,8 +141,11 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private fun updateMatch(delta: Float) {
         val active = engine ?: return
         if (flow.page != Page.MATCH) return
-        val lp = leftPulse || router.consumeLeftPulse()
-        val rp = rightPulse || router.consumeRightPulse()
+        syncPulseAvailability()
+        val touchLeftPulse = router.consumeLeftPulse()
+        val touchRightPulse = router.consumeRightPulse()
+        val lp = pulseAvailable(Side.LEFT) && (leftPulse || touchLeftPulse)
+        val rp = pulseAvailable(Side.RIGHT) && (rightPulse || touchRightPulse)
         leftPulse = false
         rightPulse = false
         val leftAxis = axis(Input.Keys.W, Input.Keys.S)
@@ -160,6 +166,26 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             ),
         )
         if (active.state.phase == MatchPhase.FINISHED && !resultHandled) finishMatch()
+    }
+
+    private fun pulseAvailable(side: Side): Boolean {
+        val state = engine?.state ?: return false
+        if (flow.page != Page.MATCH || side == Side.RIGHT && !local) return false
+        val paddle = if (side == Side.LEFT) state.left else state.right
+        return PulseControlUi.create(
+            state.phase,
+            if (side == Side.LEFT) tutorial else 0,
+            paddle.pulseArmedSeconds,
+            paddle.pulseCooldownSeconds,
+        ).enabled
+    }
+
+    private fun syncPulseAvailability() {
+        val leftEnabled = pulseAvailable(Side.LEFT)
+        val rightEnabled = pulseAvailable(Side.RIGHT)
+        router.setPulseEnabled(leftEnabled, rightEnabled)
+        if (!leftEnabled) leftPulse = false
+        if (!rightEnabled) rightPulse = false
     }
 
     private fun axis(positive: Int, negative: Int) = (if (heldKeys[positive]) 1.0 else 0.0) - (if (heldKeys[negative]) 1.0 else 0.0)
@@ -261,10 +287,13 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             return false
         }
         if (settingsCommit.attempt(save, next)) {
+            result = result?.withCommittedRewards(save, next)
             save = next
+            if (pendingReset == next) pendingReset = null
             notice = null
             return true
         }
+        if (commits.requiresReload) readOnly = true
         notice = commits.error
         return false
     }
@@ -284,13 +313,28 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                     audio.activate(save.settings)
                 }
                 "home" -> {
+                    if (flow.page == Page.CONFIRM_NEW) {
+                        if (!flow.cancelReset(commits, pendingReset)) {
+                            notice = commits.error
+                            return
+                        }
+                        pendingReset = null
+                        notice = commits.error
+                    }
                     abandonMatch()
                     flow.show(Page.START)
                     audio.activate(save.settings)
                 }
                 "local" -> startMatch(0, true)
                 "new" -> flow.show(Page.CONFIRM_NEW)
-                "confirm-new" -> if (persist(CampaignSave(settings = save.settings))) flow.show(Page.MAP)
+                "confirm-new" -> {
+                    val reset = CampaignSave(settings = save.settings)
+                    if (persist(reset)) {
+                        flow.show(Page.MAP)
+                    } else if (commits.pending == reset) {
+                        pendingReset = reset
+                    }
+                }
                 "upgrades" -> flow.show(Page.UPGRADES)
                 "respec" -> persist(CampaignProgression.respec(save))
                 "settings" -> flow.openSettings()
@@ -327,7 +371,12 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                         }
                     }
                 }
-                "save-retry" -> pendingSave?.let { persist(it) }
+                "save-retry" -> if (commits.canRetry) {
+                    pendingSave?.let {
+                        val isReset = pendingReset == it
+                        if (persist(it) && isReset) flow.show(Page.MAP)
+                    }
+                }
             }
         }
     }
@@ -370,12 +419,12 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         audio.suspend()
     }
 
-    /** Focus gain may restart menu music but never resumes an interrupted match. */
+    /** Focus gain restores audio for an already active page; it never resumes match simulation. */
     fun audioFocusChanged(granted: Boolean) {
         if (!initialized) return
         if (!granted) {
             pauseForInterruption()
-        } else if (flow.page != Page.MATCH && flow.page != Page.PAUSE && flow.page != Page.SETTINGS) {
+        } else if (audioMayActivateOnFocus(flow.page)) {
             audio.activate(save.settings)
         }
     }
@@ -409,9 +458,9 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     fun uiTargets(): List<UiTarget> {
         val targets = if (flow.page == Page.MATCH) {
             currentButtons + if (local) {
-                listOf(arena.versusLeftPulse, arena.versusRightPulse)
+                listOf(arena.versusLeftPulse.copy(enabled = pulseAvailable(Side.LEFT)), arena.versusRightPulse.copy(enabled = pulseAvailable(Side.RIGHT)))
             } else {
-                listOf(arena.soloPulse)
+                listOf(arena.soloPulse.copy(enabled = pulseAvailable(Side.LEFT)))
             }
         } else {
             currentButtons
@@ -450,6 +499,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             }
             if (flow.page == Page.MATCH) {
                 val state = engine?.state ?: return false
+                syncPulseAvailability()
                 return router.down(pointer, p.x, p.y, state.left.y.toFloat(), state.right.y.toFloat())
             }
             return false
@@ -471,7 +521,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
 
         override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
             pressedButtons.remove(pointer)
-            router.up(pointer)
+            router.cancel(pointer)
             return true
         }
 
@@ -488,8 +538,8 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                 return true
             }
             if (flow.page == Page.MATCH) {
-                if (keycode == Input.Keys.SHIFT_LEFT) leftPulse = true
-                if (keycode == Input.Keys.SHIFT_RIGHT) rightPulse = true
+                if (keycode == Input.Keys.SHIFT_LEFT && pulseAvailable(Side.LEFT)) leftPulse = true
+                if (keycode == Input.Keys.SHIFT_RIGHT && pulseAvailable(Side.RIGHT)) rightPulse = true
             } else {
                 when (keycode) {
                     Input.Keys.TAB, Input.Keys.DOWN, Input.Keys.RIGHT -> flow.nextFocus(currentButtons.map { it.enabled }, 1)
@@ -505,4 +555,18 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             return true
         }
     }
+}
+
+internal fun ResultSummary.withCommittedRewards(previous: CampaignSave, next: CampaignSave): ResultSummary {
+    if (!won || local) return this
+    val medalGain = next.bestMedals[encounter] - previous.bestMedals[encounter]
+    return if (medalGain > 0) copy(earned = medalGain, medals = next.bestMedals[encounter]) else this
+}
+
+internal fun audioMayActivateOnFocus(page: Page): Boolean = page != Page.PAUSE && page != Page.SETTINGS
+
+internal fun UiFlow.cancelReset(commits: PendingCampaignCommit, pendingReset: CampaignSave?): Boolean {
+    if (pendingReset != null && !commits.cancelPending(pendingReset)) return false
+    show(Page.START)
+    return true
 }

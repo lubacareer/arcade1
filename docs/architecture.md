@@ -17,3 +17,11 @@ The desktop launcher runs the same game/simulation code for iteration. Native-de
 libGDX 1.14.2, Kotlin 2.4.21, AGP 9.3.3, Gradle 9.5.0 and JDK 21; JVM bytecode target 17. Android minSdk 26, targetSdk 36, compileSdk 37, arm64-v8a/x86_64. AGP's built-in Kotlin uses the same resolved Kotlin compiler as the JVM modules.
 
 Dependency locks and verification metadata record the resolved build. GitHub Actions are pinned by commit. No production signing material or machine configuration belongs in the repository.
+
+## Save failure and concurrency boundaries
+
+Repositories in the same process coordinate by canonical save directory and reject stale snapshots instead of merging conflicting reset, purchase, or reward transactions. A conflict preserves the newer disk save and asks the player to reopen the game. Separate desktop processes must not share an active save directory.
+
+Snapshot bytes are forced before atomic replacement. Android and other POSIX platforms also force the containing directory after each replacement. Windows NIO does not support opening directory channels, so the desktop runner guarantees file flushing and atomic replacement there, without claiming equivalent power-loss durability.
+
+Failed changes remain pending in memory with an explicit retry notice. Retry successfully before exiting; exiting while storage still reports failure can lose unconfirmed changes. The previous committed snapshot remains recoverable. Save I/O currently runs at menu, tutorial, or completed-match transitions; sustained active rallies do not write saves. Hardware storage latency at those transitions remains unmeasured.

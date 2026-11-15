@@ -9,6 +9,8 @@ import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 data class SaveLoadResult(
     val save: CampaignSave,
@@ -18,23 +20,43 @@ data class SaveLoadResult(
 
 class UnsupportedSaveVersionException(val saveVersion: Int) : IOException("Save version " + saveVersion + " requires a newer game.")
 
+class SaveConflictException : IOException("Campaign changed in another game instance. Reopen the game to load the latest progress.")
+
+class SaveDurabilityException(cause: IOException) : IOException("Campaign was written, but storage durability could not be confirmed. Retry the save before closing the game.", cause)
+
 /**
  * Keeps complete snapshots under a caller-provided app-private directory.
  * Both staged files and replacement targets are on the same filesystem.
  * A failed replacement leaves the previous primary/backup available.
+ * Instances in this process coordinate by canonical directory and reject stale snapshots.
+ * Call load before editing an existing campaign; conflicts require reloading its current state.
+ * POSIX systems also flush rename metadata. Windows NIO cannot open directory channels,
+ * so desktop Windows retains atomic replacement and file flushing, not that extra guarantee.
  */
-class SaveRepository(private val directory: Path) {
-    private val primary = directory.resolve("campaign.json")
-    private val backup = directory.resolve("campaign.backup.json")
+class SaveRepository internal constructor(
+    directory: Path,
+    private val syncDirectory: (Path) -> Unit,
+) {
+    constructor(directory: Path) : this(directory, ::forceDirectory)
 
-    @Synchronized
-    fun load(): SaveLoadResult {
+    private val directory = directory.toFile().canonicalFile.toPath()
+    private val accessLock = directoryLocks.computeIfAbsent(this.directory) { Any() }
+    private var hasObservedPrimary = false
+    private var observedPrimary: List<Byte>? = null
+
+    private val primary = this.directory.resolve("campaign.json")
+    private val backup = this.directory.resolve("campaign.backup.json")
+
+    fun load(): SaveLoadResult = synchronized(accessLock) { loadUnlocked() }
+
+    private fun loadUnlocked(): SaveLoadResult {
         val mainRead = read(primary)
         val backupRead = read(backup)
+        remember(mainRead)
         val future = listOf(mainRead, backupRead).filterIsInstance<ReadResult.Future>().firstOrNull()
         if (future != null) {
             return SaveLoadResult(
-                save = (mainRead as? ReadResult.Valid)?.save ?: CampaignSave(),
+                save = (mainRead as? ReadResult.Valid)?.save ?: (backupRead as? ReadResult.Valid)?.save ?: CampaignSave(),
                 notice = "This campaign was saved by a newer version. Existing files are preserved; saving is disabled.",
                 readOnly = true,
             )
@@ -66,8 +88,9 @@ class SaveRepository(private val directory: Path) {
         )
     }
 
-    @Synchronized
-    fun save(save: CampaignSave) {
+    fun save(save: CampaignSave) = synchronized(accessLock) { saveUnlocked(save) }
+
+    private fun saveUnlocked(save: CampaignSave) {
         Files.createDirectories(directory)
         val current = read(primary)
         val previousBackup = read(backup)
@@ -78,7 +101,10 @@ class SaveRepository(private val directory: Path) {
                 else -> Unit
             }
         }
-        val pending = stage(SaveCodec.encode(save).toByteArray(StandardCharsets.UTF_8))
+        if (hasObservedPrimary && observedPrimary != revision(current)) throw SaveConflictException()
+        remember(current)
+        val encoded = SaveCodec.encode(save).toByteArray(StandardCharsets.UTF_8)
+        val pending = stage(encoded)
         try {
             // Never replace a healthy backup with a primary known to be corrupt.
             if (current is ReadResult.Valid) {
@@ -89,7 +115,10 @@ class SaveRepository(private val directory: Path) {
                     Files.deleteIfExists(pendingBackup)
                 }
             }
-            atomicReplace(pending, primary)
+            atomicReplace(pending, primary) {
+                // A failed directory flush can leave this rename visible. Keep retries safe.
+                remember(ReadResult.Valid(save, encoded))
+            }
         } finally {
             Files.deleteIfExists(pending)
         }
@@ -110,9 +139,30 @@ class SaveRepository(private val directory: Path) {
         }
     }
 
-    private fun atomicReplace(source: Path, destination: Path) {
+    private fun atomicReplace(source: Path, destination: Path, published: () -> Unit = {}) {
         // Do not silently fall back to a non-atomic copy on unsupported filesystems.
         Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        published()
+        try {
+            syncDirectory(directory)
+        } catch (failure: IOException) {
+            if (destination == primary) throw SaveDurabilityException(failure)
+            throw failure
+        }
+    }
+
+    private fun remember(result: ReadResult) {
+        observedPrimary = revision(result)
+        hasObservedPrimary = true
+    }
+
+    private fun revision(result: ReadResult): List<Byte>? {
+        val bytes = when (result) {
+            is ReadResult.Valid -> result.bytes
+            is ReadResult.Invalid -> result.bytes
+            else -> return null // Future/unreadable files are rejected before writing.
+        }
+        return MessageDigest.getInstance("SHA-256").digest(bytes).toList()
     }
 
     private fun read(path: Path): ReadResult {
@@ -130,7 +180,7 @@ class SaveRepository(private val directory: Path) {
         } catch (error: UnsupportedSaveVersionException) {
             ReadResult.Future(error.saveVersion)
         } catch (_: IllegalArgumentException) {
-            ReadResult.Invalid
+            ReadResult.Invalid(bytes)
         }
     }
 
@@ -139,7 +189,7 @@ class SaveRepository(private val directory: Path) {
 
     private sealed interface ReadResult {
         data object Missing : ReadResult
-        data object Invalid : ReadResult
+        data class Invalid(val bytes: ByteArray) : ReadResult
         data class Valid(val save: CampaignSave, val bytes: ByteArray) : ReadResult
         data class Future(val version: Int) : ReadResult
         data class Unavailable(val error: IOException) : ReadResult
@@ -147,5 +197,12 @@ class SaveRepository(private val directory: Path) {
 
     private companion object {
         const val MAX_SAVE_BYTES = 64 * 1024
+        val directoryLocks = ConcurrentHashMap<Path, Any>()
+
+        fun forceDirectory(path: Path) {
+            // Windows providers deny directory channels. Do not swallow real POSIX I/O errors.
+            if ("posix" !in path.fileSystem.supportedFileAttributeViews()) return
+            FileChannel.open(path, StandardOpenOption.READ).use { it.force(true) }
+        }
     }
 }

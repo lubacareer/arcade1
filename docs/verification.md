@@ -5,20 +5,20 @@ Local verification completed on **15 November 2026**. These results cover the fi
 | Check | Result |
 | --- | --- |
 | Full Gradle `check` | Passed, including Kotlin compilation, formatting checks and Android lint |
-| Simulation, progression, persistence and input tests | 46 passed |
-| Shared game/UI tests | 16 passed |
+| Simulation, progression, persistence and input tests | 54 passed |
+| Shared game/UI tests | 34 passed |
 | Python native-packaging verifier tests | 18 passed |
 | Debug APK, minified smoke APK and unsigned release AAB | Built successfully |
-| API 26 Android instrumentation | 3 of 3 passed |
-| API 37 Android instrumentation | 4 of 4 passed |
+| API 26 Android instrumentation | 5 of 5 passed |
+| API 37 Android instrumentation | 6 of 6 passed |
 | Minified smoke app | Installed and launched successfully on API 26 and API 37 |
 | Desktop runner | Launched successfully and visually checked |
 | Native ELF and APK ZIP alignment | 16KB checks passed for both `arm64-v8a` and `x86_64` |
 | API 37 emulator memory pages | Confirmed at 16,384 bytes |
 
-Instrumentation covers offline launch, landscape controls, four simultaneous touch pointers, explicit pause/resume, audio-focus release, and safe-inset updates. JVM tests cover physics and scoring, AI and hazards, boss transitions, deterministic replay, progression/rewards, save recovery, pointer ownership, tutorial movement, navigation, and save/purchase failure handling.
+Instrumentation covers offline launch, landscape controls, four simultaneous touch pointers, explicit pause/resume, audio-focus release/recovery, device directory-sync saves, and safe-inset updates. JVM tests cover physics and scoring, AI and hazards, boss transitions, deterministic replay, progression/rewards, save recovery, pointer ownership, tutorial movement, navigation, and save/purchase failure handling.
 
-Visual checks include the [phone menu](screenshots/phone-menu.png), [phone gameplay](screenshots/phone-game.png), [tablet chapter map](screenshots/tablet-map.png), and desktop presentation.
+Visual checks include the [phone menu](screenshots/phone-menu.png), [phone gameplay](screenshots/phone-game.png), [tablet chapter map](screenshots/tablet-map.png), and [desktop Larger Text + High Contrast](screenshots/desktop-accessible.png).
 
 ## Reproduce
 

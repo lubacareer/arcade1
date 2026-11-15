@@ -11,7 +11,11 @@ class TutorialDrillTest {
         assertEquals(1, drill.stage)
         repeat(3) { drill.update(.02f, 650f, 0f, false) }
         assertEquals(2, drill.stage)
-        assertTrue(drill.update(.02f, 650f, 0f, true))
+        assertFalse(drill.update(.02f, 650f, 0f, true))
+        assertEquals(3, drill.stage)
+        assertTrue(drill.pulseDemoProgress >= 0f)
+        repeat(9) { assertFalse(drill.update(.1f, null, 0f, false)) }
+        assertTrue(drill.update(.1f, null, 0f, false))
     }
 
     @Test fun `tap and early pulse cannot skip movement practice`() {

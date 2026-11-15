@@ -115,6 +115,10 @@ class AndroidLauncher :
             interruptGame()
         } else if (!audioFocusGranted) {
             requestGameAudioFocus()
+        } else {
+            // A window interruption may suspend music without releasing audio focus.
+            // The game restores permitted audio while keeping interrupted matches paused.
+            updateAudioFocus(true)
         }
     }
 

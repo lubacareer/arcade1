@@ -118,4 +118,90 @@ class SaveRepositoryTest {
         Files.writeString(directory.resolve("campaign.json"), valid.dropLast(1) + ""","settings":{"muted":"true"}}""")
         assertNotNull(SaveRepository(directory).load().notice)
     }
+
+    @Test
+    fun `future version primary recovers supported backup in read only mode`() {
+        val repo = SaveRepository(directory)
+        val backupSave = CampaignProgression.recordVictory(CampaignSave(), 0, 1)
+        repo.save(backupSave)
+        repo.save(CampaignProgression.recordVictory(backupSave, 0, 0))
+        val primary = directory.resolve("campaign.json")
+        val backup = directory.resolve("campaign.backup.json")
+        val backupBytes = Files.readAllBytes(backup)
+        val future = """{"version":99,"valuableFutureProgress":true}"""
+        Files.writeString(primary, future)
+
+        val loaded = repo.load()
+        assertEquals(backupSave, loaded.save)
+        assertTrue(loaded.readOnly)
+        assertNotNull(loaded.notice)
+        assertThrows(UnsupportedSaveVersionException::class.java) { repo.save(backupSave) }
+        assertEquals(future, Files.readString(primary))
+        assertArrayEquals(backupBytes, Files.readAllBytes(backup))
+    }
+
+    @Test
+    fun `every published snapshot is synced before save reports success`() {
+        val observed = mutableListOf<Pair<CampaignSave, CampaignSave?>>()
+        val repo = SaveRepository(directory) { path ->
+            assertEquals(directory, path)
+            val primary = SaveCodec.decode(Files.readString(path.resolve("campaign.json")))
+            val backup = path.resolve("campaign.backup.json")
+            observed += primary to if (Files.exists(backup)) SaveCodec.decode(Files.readString(backup)) else null
+        }
+        val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
+        val second = CampaignProgression.recordVictory(first, 0, 0)
+        repo.save(first)
+        repo.save(second)
+        assertEquals(listOf(first to null, first to first, second to first), observed)
+    }
+
+    @Test
+    fun `directory sync failure is reported without destroying the prior snapshot`() {
+        val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
+        val second = CampaignProgression.recordVictory(first, 0, 0)
+        SaveRepository(directory).save(first)
+        val repo = SaveRepository(directory) { throw java.io.IOException("disk flush failed") }
+        val failure = assertThrows(java.io.IOException::class.java) { repo.save(second) }
+        assertFalse(failure is SaveDurabilityException)
+        assertEquals(first, SaveRepository(directory).load().save)
+    }
+
+    @Test
+    fun `a stale repository cannot overwrite progress committed by another instance`() {
+        val first = SaveRepository(directory)
+        val second = SaveRepository(directory.resolve(".").resolve("nested").resolve(".."))
+        val firstLoaded = first.load().save
+        val stale = second.load().save
+        val victory = CampaignProgression.recordVictory(firstLoaded, 0, 0)
+        first.save(victory)
+
+        assertThrows(SaveConflictException::class.java) {
+            second.save(stale.copy(settings = stale.settings.copy(muted = true)))
+        }
+        assertEquals(victory, SaveRepository(directory).load().save)
+        val reloaded = second.load().save
+        second.save(reloaded.copy(settings = reloaded.settings.copy(muted = true)))
+        assertEquals(3, SaveRepository(directory).load().save.credits)
+        assertTrue(SaveRepository(directory).load().save.settings.muted)
+    }
+
+    @Test
+    fun `a failed final directory sync can retry the same campaign safely`() {
+        val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
+        val second = CampaignProgression.recordVictory(first, 0, 0)
+        SaveRepository(directory).save(first)
+        var syncs = 0
+        val repo = SaveRepository(directory) {
+            syncs++
+            if (syncs == 2) throw java.io.IOException("primary directory flush failed")
+        }
+        repo.load()
+        val failure = assertThrows(SaveDurabilityException::class.java) { repo.save(second) }
+        assertEquals("primary directory flush failed", failure.cause?.message)
+        assertEquals(second, SaveRepository(directory).load().save)
+        repo.save(second)
+        assertEquals(second, SaveRepository(directory).load().save)
+        assertEquals(3, SaveRepository(directory).load().save.credits)
+    }
 }
