@@ -39,8 +39,11 @@ class AlignmentTest(unittest.TestCase):
 
     def test_rejects_incongruent_offsets(self):
         data = bytearray(elf64())
-        struct.pack_into("<Q", data, 72, 100)
-        self.assertTrue(inspect_elf(bytes(data)))
+        struct.pack_into("<Q", data, 80, 100)
+        self.assertEqual(
+            inspect_elf(bytes(data)),
+            ["LOAD 0: file and virtual offsets disagree modulo 16384"],
+        )
 
     def test_rejects_invalid_class(self):
         data = bytearray(elf64())

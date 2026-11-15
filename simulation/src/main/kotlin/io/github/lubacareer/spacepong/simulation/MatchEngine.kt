@@ -27,6 +27,9 @@ class MatchEngine(val config: MatchConfig = MatchConfig()) {
         state.tick++
         capturePreviousPositions()
         if (state.phase == MatchPhase.COUNTDOWN) {
+            // Track button edges while the rally is frozen, without arming Pulse.
+            leftPulseHeld = input.leftPulse
+            rightPulseHeld = input.rightPulse
             state.countdownSeconds = max(0.0, state.countdownSeconds - Arena.STEP_SECONDS)
             if (state.countdownSeconds < TIME_EPSILON) {
                 state.countdownSeconds = 0.0

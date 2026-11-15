@@ -39,4 +39,19 @@ class UiFlowTest {
         flow.show(Page.MAP)
         assertEquals(-1, flow.focused)
     }
+
+    @Test fun `repeated settings action retains its original return page`() {
+        val flow = UiFlow().apply { show(Page.PAUSE) }
+        flow.openSettings()
+        flow.openSettings()
+        flow.closeSettings()
+        assertEquals(Page.PAUSE, flow.page)
+    }
+
+    @Test fun `buttons rendered for the previous page cannot receive input`() {
+        val settings = MenuButton("settings", 0f, 0f, 100f, 100f, "SETTINGS")
+        assertEquals(listOf(settings), buttonsForPage(Page.START, Page.START, listOf(settings)))
+        assertTrue(buttonsForPage(Page.START, Page.SETTINGS, listOf(settings)).isEmpty())
+        assertTrue(buttonsForPage(null, Page.START, listOf(settings)).isEmpty())
+    }
 }

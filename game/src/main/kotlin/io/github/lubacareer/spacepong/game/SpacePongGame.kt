@@ -51,6 +51,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private val skipTutorial = MenuButton("tutorial-skip", 40f, 24f, 180f, 96f, "SKIP")
     private val retrySave = MenuButton("save-retry", 920f, 560f, 290f, 96f, "RETRY SAVE")
     private var currentButtons: List<MenuButton> = emptyList()
+    private var renderedButtonsPage: Page? = null
 
     override fun create() {
         canvas = Canvas()
@@ -133,8 +134,11 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                 currentButtons = menus.buttons + retrySave
             }
         }
+        renderedButtonsPage = flow.page
         canvas.finish()
     }
+
+    private fun activeButtons(): List<MenuButton> = buttonsForPage(renderedButtonsPage, flow.page, currentButtons)
 
     private fun matchButtons(): List<MenuButton> = if (tutorial > 0) listOf(arena.pauseButton, skipTutorial) else listOf(arena.pauseButton)
 
@@ -456,6 +460,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     }
 
     fun uiTargets(): List<UiTarget> {
+        if (renderedButtonsPage != flow.page) return emptyList()
         val targets = if (flow.page == Page.MATCH) {
             currentButtons + if (local) {
                 listOf(arena.versusLeftPulse.copy(enabled = pulseAvailable(Side.LEFT)), arena.versusRightPulse.copy(enabled = pulseAvailable(Side.RIGHT)))
@@ -490,9 +495,10 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         private fun coordinates(x: Int, y: Int): Vector2 = viewport.unproject(point.set(x.toFloat(), y.toFloat()))
 
         override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+            if (renderedButtonsPage != flow.page) return false
             val p = coordinates(screenX, screenY)
             if (p.x !in 0f..1280f || p.y !in 0f..720f) return false
-            val hit = currentButtons.lastOrNull { it.enabled && it.contains(p.x, p.y) }
+            val hit = activeButtons().lastOrNull { it.enabled && it.contains(p.x, p.y) }
             if (hit != null) {
                 pressedButtons[pointer] = flow.page to hit
                 return true
@@ -500,7 +506,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             if (flow.page == Page.MATCH) {
                 val state = engine?.state ?: return false
                 syncPulseAvailability()
-                return router.down(pointer, p.x, p.y, state.left.y.toFloat(), state.right.y.toFloat())
+                return router.down(pointer, p.x, p.y, leftDragOrigin(drill, state.left.y.toFloat()), state.right.y.toFloat())
             }
             return false
         }
@@ -541,10 +547,11 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                 if (keycode == Input.Keys.SHIFT_LEFT && pulseAvailable(Side.LEFT)) leftPulse = true
                 if (keycode == Input.Keys.SHIFT_RIGHT && pulseAvailable(Side.RIGHT)) rightPulse = true
             } else {
+                val buttons = activeButtons()
                 when (keycode) {
-                    Input.Keys.TAB, Input.Keys.DOWN, Input.Keys.RIGHT -> flow.nextFocus(currentButtons.map { it.enabled }, 1)
-                    Input.Keys.UP, Input.Keys.LEFT -> flow.nextFocus(currentButtons.map { it.enabled }, -1)
-                    Input.Keys.ENTER, Input.Keys.SPACE -> currentButtons.getOrNull(flow.focused)?.takeIf { it.enabled }?.let { action(it.id) }
+                    Input.Keys.TAB, Input.Keys.DOWN, Input.Keys.RIGHT -> flow.nextFocus(buttons.map { it.enabled }, 1)
+                    Input.Keys.UP, Input.Keys.LEFT -> flow.nextFocus(buttons.map { it.enabled }, -1)
+                    Input.Keys.ENTER, Input.Keys.SPACE -> buttons.getOrNull(flow.focused)?.takeIf { it.enabled }?.let { action(it.id) }
                 }
             }
             return true
@@ -570,3 +577,5 @@ internal fun UiFlow.cancelReset(commits: PendingCampaignCommit, pendingReset: Ca
     show(Page.START)
     return true
 }
+
+internal fun leftDragOrigin(drill: TutorialDrill?, paddleY: Float): Float = drill?.ghostY ?: paddleY

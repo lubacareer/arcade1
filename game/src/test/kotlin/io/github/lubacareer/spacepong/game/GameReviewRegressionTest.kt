@@ -1,5 +1,6 @@
 package io.github.lubacareer.spacepong.game
 
+import io.github.lubacareer.spacepong.input.TouchRouter
 import io.github.lubacareer.spacepong.progression.CampaignSave
 import io.github.lubacareer.spacepong.progression.SaveDurabilityException
 import io.github.lubacareer.spacepong.progression.UpgradeRanks
@@ -56,5 +57,17 @@ class GameReviewRegressionTest {
         assertTrue(flow.cancelReset(commits, reset))
         assertEquals(Page.START, flow.page)
         assertNull(commits.pending)
+    }
+
+    @Test fun `tutorial regrab follows the visible ghost without snapping to the paused paddle`() {
+        val drill = TutorialDrill()
+        drill.update(.1f, 500f, 0f, false)
+        val initialGhost = drill.ghostY
+        val router = TouchRouter(false)
+        assertTrue(router.down(1, 100f, initialGhost, leftDragOrigin(drill, 360f), 360f))
+        assertEquals(initialGhost, router.leftTargetY)
+        router.move(1, 100f, initialGhost + 20f)
+        assertEquals(initialGhost + 20f, router.leftTargetY)
+        assertEquals(360f, leftDragOrigin(null, 360f))
     }
 }

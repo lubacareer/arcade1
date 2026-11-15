@@ -20,6 +20,7 @@ class UiFlow {
     }
 
     fun openSettings() {
+        if (page == Page.SETTINGS) return
         settingsReturn = page
         show(Page.SETTINGS)
     }
@@ -49,3 +50,5 @@ class UiFlow {
         return -1
     }
 }
+
+internal fun buttonsForPage(renderedPage: Page?, activePage: Page, buttons: List<MenuButton>): List<MenuButton> = if (renderedPage == activePage) buttons else emptyList()

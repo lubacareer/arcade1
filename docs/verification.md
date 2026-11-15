@@ -5,8 +5,8 @@ Local verification completed on **15 November 2026**. These results cover the fi
 | Check | Result |
 | --- | --- |
 | Full Gradle `check` | Passed, including Kotlin compilation, formatting checks and Android lint |
-| Simulation, progression, persistence and input tests | 54 passed |
-| Shared game/UI tests | 34 passed |
+| Simulation, progression, persistence and input tests | 56 passed |
+| Shared game/UI/audio tests | 39 passed |
 | Python packaging/SDK bootstrap tests | 24 passed |
 | Debug APK, minified smoke APK and unsigned release AAB | Built successfully |
 | API 26 Android instrumentation | 5 of 5 passed |
@@ -37,6 +37,7 @@ Run instrumentation with the intended emulator/device connected. The API 37 loca
 
 ## Remaining verification
 
-- Hosted CI and automated PR reviews are pending at this local verification checkpoint.
+- Hosted verification and API 26/API 35 instrumentation passed on commit `f0c0fe4`; the final review-fix batch is locally verified and will rerun CI when pushed. Baz and CodeRabbit reviews were triggered, and their available findings were addressed.
 - Physical-device input latency, sustained thermal behavior, and high-refresh performance have not been measured. Emulator and desktop results do not establish those hardware characteristics.
+- macOS launcher arguments and its AAPT2 checksum are configured and validated without a Mac runtime; actual macOS execution remains untested.
 - The release bundle is unsigned. Production signing and Play Store publication have not been performed.

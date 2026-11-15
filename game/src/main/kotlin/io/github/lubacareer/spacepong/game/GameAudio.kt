@@ -24,6 +24,7 @@ class GameAudio(private val hasAudioFocus: () -> Boolean) {
     }
 
     fun apply(settings: GameSettings) {
+        if (settings.muted || settings.effectsVolume == 0f) sounds.values.forEach { it.stop() }
         val track = music ?: return
         track.volume = if (settings.muted) 0f else settings.musicVolume
         if (suspended || !hasAudioFocus() || settings.muted || settings.musicVolume == 0f) {
