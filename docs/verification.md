@@ -7,7 +7,7 @@ Local verification completed on **15 November 2026**. These results cover the fi
 | Full Gradle `check` | Passed, including Kotlin compilation, formatting checks and Android lint |
 | Simulation, progression, persistence and input tests | 54 passed |
 | Shared game/UI tests | 34 passed |
-| Python native-packaging verifier tests | 18 passed |
+| Python packaging/SDK bootstrap tests | 24 passed |
 | Debug APK, minified smoke APK and unsigned release AAB | Built successfully |
 | API 26 Android instrumentation | 5 of 5 passed |
 | API 37 Android instrumentation | 6 of 6 passed |

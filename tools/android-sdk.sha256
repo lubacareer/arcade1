@@ -1,0 +1,6 @@
+# Linux x86_64 downloads from https://dl.google.com/android/repository/
+# CLI SHA-256 published at https://developer.android.com/studio
+# Platform-tools 37.0.1 SHA-256 calculated from the official archive after matching
+# official repository2-3.xml SHA-1 477254aa5f903c15cf51001717bdf347fb6b53e0.
+4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583  commandlinetools-linux-15859902_latest.zip
+d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1  platform-tools_r37.0.1-linux.zip
