@@ -18,10 +18,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify and install pinned Android SDK tools
+      - name: Verify and install pinned SDK bootstrap tools
         run: bash tools/bootstrap-android-sdk.sh
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-      - name: Install pinned Android SDK
+      - name: Install selected Android SDK packages
         run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
       - name: Unit, static and packaging checks
         run: |
@@ -58,7 +58,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify and install pinned Android SDK tools
+      - name: Verify and install pinned SDK bootstrap tools
         run: bash tools/bootstrap-android-sdk.sh
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Enable KVM

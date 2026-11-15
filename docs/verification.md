@@ -37,7 +37,7 @@ Run instrumentation with the intended emulator/device connected. The API 37 loca
 
 ## Remaining verification
 
-- Hosted verification and API 26/API 35 instrumentation passed on commit `f0c0fe4`; the final review-fix batch is locally verified and will rerun CI when pushed. Baz and CodeRabbit reviews were triggered, and their available findings were addressed.
+- Hosted verification and API 26/API 35 instrumentation passed on commit `f0c0fe4`; the final review-fix batch passes local checks. See [PR #1](https://github.com/lubacareer/arcade1/pull/1) for current CI status. Baz and CodeRabbit reviews were triggered and gameplay/build fixes were applied. Baz also identified complete SDK archive pinning as further hardening; the remaining provider-trust boundary is documented in [architecture.md](architecture.md).
 - Physical-device input latency, sustained thermal behavior, and high-refresh performance have not been measured. Emulator and desktop results do not establish those hardware characteristics.
 - macOS launcher arguments and its AAPT2 checksum are configured and validated without a Mac runtime; actual macOS execution remains untested.
 - The release bundle is unsigned. Production signing and Play Store publication have not been performed.

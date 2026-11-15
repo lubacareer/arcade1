@@ -18,6 +18,8 @@ libGDX 1.14.2, Kotlin 2.4.21, AGP 9.3.3, Gradle 9.5.0 and JDK 21; JVM bytecode t
 
 Dependency locks and verification metadata record the resolved build. GitHub Actions are pinned by commit. No production signing material or machine configuration belongs in the repository.
 
+The Linux CI bootstrap verifies checked-in SHA-256 hashes for command-line tools and platform-tools before extraction or execution, then detects later changes to those installed files. This does not independently pin the entire Android SDK. Build tools 36.0.0 and platform 37.0 are selected by package ID; the emulator and API 26/API 35 Google APIs images are installed through the official SDK repository. Their archive revisions and contents remain trusted to that provider. A complete SDK archive lockfile is additional supply-chain hardening and is not implemented here.
+
 ## Save failure and concurrency boundaries
 
 Repositories in the same process coordinate by canonical save directory and reject stale snapshots instead of merging conflicting reset, purchase, or reward transactions. A conflict preserves the newer disk save and asks the player to reopen the game. Separate desktop processes must not share an active save directory.
