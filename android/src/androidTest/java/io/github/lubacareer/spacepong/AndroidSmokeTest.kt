@@ -47,6 +47,8 @@ class AndroidSmokeTest {
     }
 
     private fun tap(app: AndroidLauncher, id: String) {
+        awaitWindowFocus(app)
+        instrumentation.waitForIdleSync()
         val deadline = SystemClock.uptimeMillis() + 10000
         var target: UiTarget? = null
         while (target == null && SystemClock.uptimeMillis() < deadline) {
@@ -54,7 +56,7 @@ class AndroidSmokeTest {
             if (target == null) SystemClock.sleep(50)
         }
         val found = checkNotNull(target) { "Missing enabled target: $id" }
-        assertTrue(device.click((found.x + found.width / 2).toInt(), (found.y + found.height / 2).toInt()))
+        assertTrue("Android rejected tap $id at $found on ${device.displayWidth}x${device.displayHeight}", device.click((found.x + found.width / 2).toInt(), (found.y + found.height / 2).toInt()))
         SystemClock.sleep(150)
     }
 
