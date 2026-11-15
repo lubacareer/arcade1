@@ -35,6 +35,29 @@ android {
     }
     packaging { jniLibs { useLegacyPackaging = false } }
 }
+// AGP host tools carry independent transitive dependencies. Keep their security fixes
+// scoped here so these overrides never change the game's Android runtime classpath.
+// Guava: https://github.com/google/guava/releases/tag/v33.7.2
+// Netty: https://github.com/netty/netty/releases/tag/netty-4.1.140.Final
+// Bouncy Castle: https://www.bouncycastle.org/download/bouncy-castle-java/
+configurations.configureEach {
+    if (name == "androidLintTool" || name.startsWith("unified-test-platform-")) {
+        resolutionStrategy.eachDependency {
+            val patchedVersion = when {
+                requested.group == "com.google.guava" && requested.name == "guava" -> "33.7.2-jre"
+                // The optional tcnative family has its own version scheme.
+                requested.group == "io.netty" && !requested.name.startsWith("netty-tcnative") -> "4.1.140.Final"
+                requested.group == "org.bouncycastle" &&
+                    requested.name in setOf("bcprov-jdk18on", "bcpkix-jdk18on", "bcutil-jdk18on") -> "1.87"
+                else -> null
+            }
+            if (patchedVersion != null) {
+                useVersion(patchedVersion)
+                because("Patch vulnerable AGP lint and device-test tooling dependencies")
+            }
+        }
+    }
+}
 val natives by configurations.creating
 dependencies {
     implementation(project(":game"))
