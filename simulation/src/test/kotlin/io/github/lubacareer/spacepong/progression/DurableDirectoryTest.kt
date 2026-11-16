@@ -1,6 +1,7 @@
 package io.github.lubacareer.spacepong.progression
 
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.IOException
@@ -10,6 +11,12 @@ import java.nio.file.Path
 class DurableDirectoryTest {
     @TempDir
     lateinit var directory: Path
+
+    @BeforeEach
+    fun canonicalizeDirectory() {
+        // Match the repository's paths even when the temporary root contains a symlink.
+        directory = directory.toFile().canonicalFile.toPath()
+    }
 
     @Test
     fun `first save makes the campaign directory reachable before publishing any file`() {

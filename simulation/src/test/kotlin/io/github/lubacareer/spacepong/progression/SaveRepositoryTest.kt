@@ -1,6 +1,7 @@
 package io.github.lubacareer.spacepong.progression
 
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -9,6 +10,12 @@ import java.nio.file.Path
 class SaveRepositoryTest {
     @TempDir
     lateinit var directory: Path
+
+    @BeforeEach
+    fun canonicalizeDirectory() {
+        // Match the repository's paths even when the temporary root contains a symlink.
+        directory = directory.toFile().canonicalFile.toPath()
+    }
 
     @Test
     fun `new installation has no warning and round trip preserves all state`() {
