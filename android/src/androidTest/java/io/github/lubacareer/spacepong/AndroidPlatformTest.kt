@@ -109,8 +109,10 @@ class AndroidPlatformTest {
         ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
             lateinit var app: AndroidLauncher
             scenario.onActivity { app = it }
-            val directory = Files.createTempDirectory(app.cacheDir.toPath(), "campaign-sync-")
+            val fixture = Files.createTempDirectory(app.cacheDir.toPath(), "campaign-sync-")
+            val directory = fixture.resolve("new-parent").resolve("campaign")
             try {
+                assertFalse("First save must create the directory chain", Files.exists(directory))
                 assertTrue("Android saves should use directory fsync", "posix" in directory.fileSystem.supportedFileAttributeViews())
                 val repo = SaveRepository(directory)
                 val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
@@ -119,7 +121,7 @@ class AndroidPlatformTest {
                 repo.save(second)
                 assertEquals(second, SaveRepository(directory).load().save)
             } finally {
-                directory.toFile().deleteRecursively()
+                fixture.toFile().deleteRecursively()
             }
         }
     }

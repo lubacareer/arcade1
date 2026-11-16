@@ -4,11 +4,14 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
+import java.nio.file.NotDirectoryException
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
@@ -30,7 +33,8 @@ class SaveDurabilityException(cause: IOException) : IOException("Campaign was wr
  * A failed replacement leaves the previous primary/backup available.
  * Instances in this process coordinate by canonical directory and reject stale snapshots.
  * Call load before editing an existing campaign; conflicts require reloading its current state.
- * POSIX systems also flush rename metadata. Windows NIO cannot open directory channels,
+ * POSIX systems flush new directory entries before publication and each replacement afterward.
+ * Windows NIO cannot open directory channels,
  * so desktop Windows retains atomic replacement and file flushing, not that extra guarantee.
  */
 class SaveRepository internal constructor(
@@ -91,7 +95,7 @@ class SaveRepository internal constructor(
     fun save(save: CampaignSave) = synchronized(accessLock) { saveUnlocked(save) }
 
     private fun saveUnlocked(save: CampaignSave) {
-        Files.createDirectories(directory)
+        ensureDurableDirectory(directory, syncDirectory)
         val current = read(primary)
         val previousBackup = read(backup)
         listOf(current, previousBackup).forEach {
@@ -205,4 +209,24 @@ class SaveRepository internal constructor(
             FileChannel.open(path, StandardOpenOption.READ).use { it.force(true) }
         }
     }
+}
+
+internal fun ensureDurableDirectory(directory: Path, syncDirectory: (Path) -> Unit) {
+    try {
+        if (!Files.readAttributes(directory, BasicFileAttributes::class.java).isDirectory) {
+            throw NotDirectoryException(directory.toString())
+        }
+    } catch (_: NoSuchFileException) {
+        val parent = directory.parent ?: throw IOException("Cannot create a missing filesystem root: $directory")
+        ensureDurableDirectory(parent, syncDirectory)
+        try {
+            Files.createDirectory(directory)
+        } catch (alreadyExists: FileAlreadyExistsException) {
+            // Another repository may have created a shared ancestor while we prepared its parent.
+            if (!Files.readAttributes(directory, BasicFileAttributes::class.java).isDirectory) throw alreadyExists
+        }
+    }
+    // Even an existing directory may be left by a failed earlier mkdir/parent-sync attempt.
+    // Confirm its entry before creating any descendants or publishing campaign files.
+    directory.parent?.let(syncDirectory)
 }

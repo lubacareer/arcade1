@@ -144,10 +144,11 @@ class SaveRepositoryTest {
     fun `every published snapshot is synced before save reports success`() {
         val observed = mutableListOf<Pair<CampaignSave, CampaignSave?>>()
         val repo = SaveRepository(directory) { path ->
-            assertEquals(directory, path)
-            val primary = SaveCodec.decode(Files.readString(path.resolve("campaign.json")))
-            val backup = path.resolve("campaign.backup.json")
-            observed += primary to if (Files.exists(backup)) SaveCodec.decode(Files.readString(backup)) else null
+            if (path == directory) {
+                val primary = SaveCodec.decode(Files.readString(path.resolve("campaign.json")))
+                val backup = path.resolve("campaign.backup.json")
+                observed += primary to if (Files.exists(backup)) SaveCodec.decode(Files.readString(backup)) else null
+            }
         }
         val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
         val second = CampaignProgression.recordVictory(first, 0, 0)
@@ -161,7 +162,9 @@ class SaveRepositoryTest {
         val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
         val second = CampaignProgression.recordVictory(first, 0, 0)
         SaveRepository(directory).save(first)
-        val repo = SaveRepository(directory) { throw java.io.IOException("disk flush failed") }
+        val repo = SaveRepository(directory) { path ->
+            if (path == directory) throw java.io.IOException("disk flush failed")
+        }
         val failure = assertThrows(java.io.IOException::class.java) { repo.save(second) }
         assertFalse(failure is SaveDurabilityException)
         assertEquals(first, SaveRepository(directory).load().save)
@@ -191,10 +194,12 @@ class SaveRepositoryTest {
         val first = CampaignProgression.recordVictory(CampaignSave(), 0, 4)
         val second = CampaignProgression.recordVictory(first, 0, 0)
         SaveRepository(directory).save(first)
-        var syncs = 0
-        val repo = SaveRepository(directory) {
-            syncs++
-            if (syncs == 2) throw java.io.IOException("primary directory flush failed")
+        var failAfterPublication = true
+        val repo = SaveRepository(directory) { path ->
+            if (path == directory && failAfterPublication && SaveCodec.decode(Files.readString(directory.resolve("campaign.json"))) == second) {
+                failAfterPublication = false
+                throw java.io.IOException("primary directory flush failed")
+            }
         }
         repo.load()
         val failure = assertThrows(SaveDurabilityException::class.java) { repo.save(second) }
