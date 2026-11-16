@@ -42,6 +42,16 @@ chmod +x gradlew
 ./gradlew :desktop:run
 ```
 
+Linux CI installs an isolated SDK from the checked-in archive lock. To install the same build profile into a fresh directory on a Linux filesystem:
+
+```sh
+python3 tools/android_sdk.py install --profile build \
+  --sdk-root "$HOME/.cache/space-pong/locked-sdk" \
+  --cache-dir "$HOME/.cache/space-pong/sdk-archives" --accept-licenses
+export ANDROID_HOME="$HOME/.cache/space-pong/locked-sdk"
+```
+
+The installer preserves existing nonempty SDK directories. Emulator CI uses the `emulator26` and `emulator35` profiles. See [architecture](docs/architecture.md) for verification and pin updates.
 Outputs:
 
 - Installable test build: `android/build/outputs/apk/debug/android-debug.apk`

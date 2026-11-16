@@ -1,44 +1,54 @@
 #!/usr/bin/env bash
-# The pinned emulator action always requests platform-tools. Keep our verified copy.
+# Requests may only use the already installed, fully verified SDK profile.
 set -euo pipefail
-verify_pins() {
-  (cd "${ANDROID_HOME:?}" && sha256sum --status --check "$ANDROID_HOME/.pinned-tools.sha256")
+sdk_root="${ANDROID_HOME:?ANDROID_HOME must name the pinned SDK}"
+helper="$sdk_root/.space-pong/android_sdk.py"
+
+verify_sdk() {
+  python3 "$helper" verify --sdk-root "$sdk_root"
 }
-verify_pins
-args=()
-skipped_platform=false
-has_package=false
-query=false
-for arg in "$@"; do
-  case "$arg" in
-    --licenses|--list|--list_installed|--version)
-      query=true
-      args+=("$arg")
+
+reject() {
+  printf 'Refusing SDK-manager request outside the pinned profile: %s\n' "$1" >&2
+  exit 2
+}
+
+if (( $# == 1 )); then
+  case "$1" in
+    --licenses)
+      # The installer recorded the locked licenses; this operation cannot accept new ones.
+      verify_sdk
+      exit 0
       ;;
-    --install|--verbose|--channel=[0-3]) args+=("$arg") ;;
-    -*)
-      echo "Refusing unsupported SDK-manager option that could bypass pinned tools: $arg" >&2
-      exit 2
-      ;;
-    platform-tools) skipped_platform=true ;;
-    platform-tools*|cmdline-tools*)
-      echo "Command-line and platform tools must be changed through the checked-in checksum pins." >&2
-      exit 2
-      ;;
-    *)
-      has_package=true
-      args+=("$arg")
+    --version|--list_installed)
+      verify_sdk
+      status=0
+      "$sdk_root/cmdline-tools/22.0/bin/sdkmanager.unwrapped" "$@" || status=$?
+      # Verify even after a failing query, before another SDK tool can run.
+      verify_sdk
+      exit "$status"
       ;;
   esac
-done
-if "$skipped_platform"; then
-  if "$query"; then
-    echo "Refusing ambiguous platform-tools request with a query operation." >&2
-    exit 2
-  fi
-  echo "Keeping repository-pinned Android platform-tools." >&2
-  if ! "$has_package"; then exit 0; fi
 fi
-"${ANDROID_HOME:?}/cmdline-tools/latest/bin/sdkmanager.unwrapped" "${args[@]}"
-# SDK package dependencies can trigger implicit upgrades: fail before any new tools run.
-verify_pins
+
+packages=()
+seen_install=false
+seen_channel=false
+for arg in "$@"; do
+  case "$arg" in
+    --install)
+      if "$seen_install"; then reject "duplicate --install"; fi
+      seen_install=true
+      ;;
+    --channel=0)
+      if "$seen_channel"; then reject "duplicate --channel=0"; fi
+      seen_channel=true
+      ;;
+    ""|-*) reject "$arg" ;;
+    *) packages+=("$arg") ;;
+  esac
+done
+if (( ${#packages[@]} == 0 )); then reject "no package IDs supplied"; fi
+
+# Exact IDs must be locked and installed. Never delegate installation or dependency resolution.
+python3 "$helper" verify-packages --sdk-root "$sdk_root" -- "${packages[@]}"

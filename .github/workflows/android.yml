@@ -18,11 +18,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify and install pinned SDK bootstrap tools
-        run: bash tools/bootstrap-android-sdk.sh
+      - name: Verify and install locked Android SDK
+        run: bash tools/bootstrap-android-sdk.sh build
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-      - name: Install selected Android SDK packages
-        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
       - name: Unit, static and packaging checks
         run: |
           chmod +x gradlew
@@ -58,18 +56,17 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify and install pinned SDK bootstrap tools
-        run: bash tools/bootstrap-android-sdk.sh
+      - name: Verify and install locked Android SDK
+        run: bash tools/bootstrap-android-sdk.sh emulator${{ matrix.api }}
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Install build SDK
+      - name: Prepare Gradle launcher
         run: |
           chmod +x gradlew
-          sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api }}

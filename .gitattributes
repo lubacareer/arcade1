@@ -6,3 +6,5 @@ gradlew text eol=lf
 *.wav binary
 *.ogg binary
 *.jar binary
+# Registration hashes are computed over these exact LF bytes.
+tools/android-sdk-metadata/*.xml text eol=lf
