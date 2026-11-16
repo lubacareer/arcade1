@@ -1,0 +1,3 @@
+-keep class com.badlogic.gdx.backends.android.AndroidApplication { *; }
+-keepclassmembers class * { native <methods>; }
+-dontwarn org.lwjgl.**

@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "host": "linux-x86_64",
+  "profiles": {
+    "build": [
+      "cmdline-tools;22.0",
+      "platform-tools",
+      "build-tools;36.0.0",
+      "platforms;android-37.0"
+    ],
+    "emulator26": [
+      "cmdline-tools;22.0",
+      "platform-tools",
+      "build-tools;36.0.0",
+      "platforms;android-37.0",
+      "build-tools;37.0.0",
+      "platforms;android-26",
+      "emulator",
+      "system-images;android-26;google_apis;x86_64"
+    ],
+    "emulator35": [
+      "cmdline-tools;22.0",
+      "platform-tools",
+      "build-tools;36.0.0",
+      "platforms;android-37.0",
+      "build-tools;37.0.0",
+      "platforms;android-35",
+      "emulator",
+      "system-images;android-35;google_apis;x86_64"
+    ]
+  },
+  "license_hashes": {
+    "android-sdk-license": [
+      "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    ]
+  },
+  "packages": [
+    {
+      "id": "build-tools;36.0.0",
+      "revision": "36.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_linux.zip",
+      "size": 63737259,
+      "source_sha1": "b0b6376977657e8ad9b969bacf4093601da2c6fb",
+      "sha256": "5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b",
+      "archive_root": "android-16",
+      "install_path": "build-tools/36.0.0",
+      "registration_file": "android-sdk-metadata/build-tools-36.0.0.xml",
+      "registration_sha256": "026371bccc55d90436762c04a85d7d74d167b7cfc444a03b64b3ac0bbf058dfa",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "build-tools;37.0.0",
+      "revision": "37.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r37_linux.zip",
+      "size": 66135704,
+      "source_sha1": "70954e99f4c3d9d46ee70fa32624672fe7cd6ebe",
+      "sha256": "01af179347cbcd9c208b7f8171f7b21f6dd1d2f85bcd15e88caa51d5d7b86060",
+      "archive_root": "android-37.0",
+      "install_path": "build-tools/37.0.0",
+      "registration_file": "android-sdk-metadata/build-tools-37.0.0.xml",
+      "registration_sha256": "b0bc2d9690ce38b89b195ca3f7d6bda38e845a2adb2c6b47f8ff82d6c0e16014",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "cmdline-tools;22.0",
+      "revision": "22.0",
+      "url": "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip",
+      "size": 181833628,
+      "source_sha1": "040d3996a65543d22ec4bf73e4c37aa37a8d4af4",
+      "sha256": "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583",
+      "archive_root": "cmdline-tools",
+      "install_path": "cmdline-tools/22.0",
+      "registration_file": "android-sdk-metadata/cmdline-tools-22.0.xml",
+      "registration_sha256": "7e2170bc1e347fc98265368322bba467cbb125f70342a7d6373d1514d8bf450d",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "emulator",
+      "revision": "37.2.13",
+      "url": "https://dl.google.com/android/repository/emulator-linux_x64-16740729.zip",
+      "size": 349658551,
+      "source_sha1": "f41f9e31eb5ca64926603c03265c50bbc0ff4172",
+      "sha256": "cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd",
+      "archive_root": "emulator",
+      "install_path": "emulator",
+      "registration_file": "android-sdk-metadata/emulator.xml",
+      "registration_sha256": "0deb7b04133bad7901479960a621d7d0bc9b18b9bce297f97e8fe2553aa36450",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "platform-tools",
+      "revision": "37.0.1",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip",
+      "size": 9054187,
+      "source_sha1": "477254aa5f903c15cf51001717bdf347fb6b53e0",
+      "sha256": "d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1",
+      "archive_root": "platform-tools",
+      "install_path": "platform-tools",
+      "registration_file": "android-sdk-metadata/platform-tools.xml",
+      "registration_sha256": "02cebec0fda378f5de6f7d6fc8e06d96aaa90ca833f17f9edf3ef91ed41098e4",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "platforms;android-26",
+      "revision": "2",
+      "url": "https://dl.google.com/android/repository/platform-26_r02.zip",
+      "size": 63623734,
+      "source_sha1": "e4ae5d7aa557a3c827135838ee400da8443ac4ef",
+      "sha256": "2aafa7d19c5e9c4b643ee6ade3d85ef89dc2f79e8383efdb9baf7fddad74b52a",
+      "archive_root": "android-8.0.0",
+      "install_path": "platforms/android-26",
+      "registration_file": "android-sdk-metadata/platforms-android-26.xml",
+      "registration_sha256": "dc74698b007251a732022cd13ce18fb7a9678069e9538ae7de04840120181181",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "platforms;android-35",
+      "revision": "2",
+      "url": "https://dl.google.com/android/repository/platform-35_r02.zip",
+      "size": 64273788,
+      "source_sha1": "0bb560a90a7a2cbd0dd8348224d518b638fe7949",
+      "sha256": "0988cacad01b38a18a47bac14a0695f246bc76c1b06c0eeb8eb0dc825ab0c8e0",
+      "archive_root": "android-35",
+      "install_path": "platforms/android-35",
+      "registration_file": "android-sdk-metadata/platforms-android-35.xml",
+      "registration_sha256": "8085357681dde7c1709a6683cb2f2262fe8c75502cbb02e543ad2411d9bffa99",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "platforms;android-37.0",
+      "revision": "2",
+      "url": "https://dl.google.com/android/repository/platform-37.0_r02.zip",
+      "size": 67281901,
+      "source_sha1": "ed8ebf7f8822a4de5686d427f237d2fa30ff7410",
+      "sha256": "840b23e827f96e64aea4c89a1194aac3dc5f6bad37edb231c5c795d890330e8d",
+      "archive_root": "android-37.0",
+      "install_path": "platforms/android-37.0",
+      "registration_file": "android-sdk-metadata/platforms-android-37.0.xml",
+      "registration_sha256": "918ad3a146bf6d8d2af4d27ec200b1f969040f8c4472dbbee5170e95a33ebd4e",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "system-images;android-26;google_apis;x86_64",
+      "revision": "16",
+      "url": "https://dl.google.com/android/repository/sys-img/google_apis/x86_64-26_r16.zip",
+      "size": 980740438,
+      "source_sha1": "0eb13cc91cf164b617eaf85e4030289cb18189de",
+      "sha256": "cd19a220610518b107ba8bca5da16088bb07d5ffedb53106ca9caf9adda06a4d",
+      "archive_root": "x86_64",
+      "install_path": "system-images/android-26/google_apis/x86_64",
+      "registration_file": "android-sdk-metadata/system-images-android-26-google_apis-x86_64.xml",
+      "registration_sha256": "c571fc9bd8a8d6ac3fa1f6ce70959fd6e1b0dca64c92b3fde159f713e212139b",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    },
+    {
+      "id": "system-images;android-35;google_apis;x86_64",
+      "revision": "9",
+      "url": "https://dl.google.com/android/repository/sys-img/google_apis/x86_64-35_r09.zip",
+      "size": 1738815903,
+      "source_sha1": "0103e6dab21290c4b9d16550a3ce99476f884eef",
+      "sha256": "c67b9ba0ff5bc0eb6d046871bfa228af14d4d47b02f0cdae94f048e511b7566e",
+      "archive_root": "x86_64",
+      "install_path": "system-images/android-35/google_apis/x86_64",
+      "registration_file": "android-sdk-metadata/system-images-android-35-google_apis-x86_64.xml",
+      "registration_sha256": "2137b7e7b04f8b042bd3461bf8dafcebf402e89c8ecec50f4685beeacd7a0899",
+      "license_id": "android-sdk-license",
+      "license_sha1": "efa68a6b3c661d18699d5c026771d5911cdc2f83"
+    }
+  ]
+}
