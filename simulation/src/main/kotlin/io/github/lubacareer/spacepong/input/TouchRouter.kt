@@ -19,13 +19,15 @@ class TouchRouter(
     val height: Float = 720f,
 ) {
     private enum class Action { LEFT_DRAG, RIGHT_DRAG, LEFT_PULSE, RIGHT_PULSE }
-    private data class Capture(val action: Action, val offsetY: Float = 0f)
+    private data class Capture(val action: Action, val offsetY: Float = 0f, var pulsePending: Boolean = false)
 
     private val captures = mutableMapOf<Int, Capture>()
     private var leftPulseArea: TouchRect? = null
     private var rightPulseArea: TouchRect? = null
-    private var leftPulsePending = false
-    private var rightPulsePending = false
+
+    // Released taps survive cancellation of a later capture, including reused pointer IDs.
+    private var leftReleasedPulsePending = false
+    private var rightReleasedPulsePending = false
     private var leftPulseEnabled = true
     private var rightPulseEnabled = true
 
@@ -62,12 +64,11 @@ class TouchRouter(
             Action.RIGHT_DRAG -> y - rightPaddleY
             else -> 0f
         }
-        captures[pointer] = Capture(action, offset)
+        captures[pointer] = Capture(action, offset, pulsePending = action == Action.LEFT_PULSE || action == Action.RIGHT_PULSE)
         when (action) {
             Action.LEFT_DRAG -> leftTargetY = leftPaddleY
             Action.RIGHT_DRAG -> rightTargetY = rightPaddleY
-            Action.LEFT_PULSE -> leftPulsePending = true
-            Action.RIGHT_PULSE -> rightPulsePending = true
+            Action.LEFT_PULSE, Action.RIGHT_PULSE -> Unit
         }
         return true
     }
@@ -84,10 +85,12 @@ class TouchRouter(
     }
 
     fun up(pointer: Int) {
-        when (captures.remove(pointer)?.action) {
+        val capture = captures.remove(pointer) ?: return
+        when (capture.action) {
             Action.LEFT_DRAG -> leftTargetY = null
             Action.RIGHT_DRAG -> rightTargetY = null
-            else -> Unit
+            Action.LEFT_PULSE -> leftReleasedPulsePending = leftReleasedPulsePending || capture.pulsePending
+            Action.RIGHT_PULSE -> rightReleasedPulsePending = rightReleasedPulsePending || capture.pulsePending
         }
     }
 
@@ -96,28 +99,37 @@ class TouchRouter(
         when (captures.remove(pointer)?.action) {
             Action.LEFT_DRAG -> leftTargetY = null
             Action.RIGHT_DRAG -> rightTargetY = null
-            Action.LEFT_PULSE -> leftPulsePending = false
-            Action.RIGHT_PULSE -> rightPulsePending = false
-            null -> Unit
+            Action.LEFT_PULSE, Action.RIGHT_PULSE, null -> Unit
         }
     }
 
     fun setPulseEnabled(left: Boolean, right: Boolean = false) {
         leftPulseEnabled = left
         rightPulseEnabled = right
-        if (!left) leftPulsePending = false
-        if (!right) rightPulsePending = false
+        if (!left) consumeLeftPulse()
+        if (!right) consumeRightPulse()
     }
 
     fun cancelAll() {
         captures.clear()
         leftTargetY = null
         rightTargetY = null
-        leftPulsePending = false
-        rightPulsePending = false
+        leftReleasedPulsePending = false
+        rightReleasedPulsePending = false
     }
 
-    fun consumeLeftPulse(): Boolean = leftPulsePending.also { leftPulsePending = false }
+    fun consumeLeftPulse(): Boolean {
+        val held = consumeHeldPulse(Action.LEFT_PULSE)
+        return (leftReleasedPulsePending || held).also { leftReleasedPulsePending = false }
+    }
 
-    fun consumeRightPulse(): Boolean = rightPulsePending.also { rightPulsePending = false }
+    fun consumeRightPulse(): Boolean {
+        val held = consumeHeldPulse(Action.RIGHT_PULSE)
+        return (rightReleasedPulsePending || held).also { rightReleasedPulsePending = false }
+    }
+
+    private fun consumeHeldPulse(action: Action): Boolean {
+        val capture = captures.values.firstOrNull { it.action == action } ?: return false
+        return capture.pulsePending.also { capture.pulsePending = false }
+    }
 }

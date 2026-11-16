@@ -2,6 +2,7 @@ package io.github.lubacareer.spacepong.input
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.function.Executable
 
 class TouchRouterTest {
     @Test
@@ -112,5 +113,112 @@ class TouchRouterTest {
         assertNull(router.leftTargetY)
         assertTrue(router.down(4, 1050f, 50f, 360f, 360f))
         assertTrue(router.consumeRightPulse())
+    }
+
+    @Test
+    fun `canceling a later touch preserves an earlier completed pulse`() = forEachPulse {
+        down(1)
+        router.up(1)
+        down(2)
+        router.cancel(2)
+        assertTrue(consume())
+        assertFalse(consume())
+    }
+
+    @Test
+    fun `reused pointer cancellation preserves its previous completed tap`() = forEachPulse {
+        down(1)
+        router.up(1)
+        down(1)
+        router.cancel(1)
+        assertTrue(consume())
+        assertFalse(consume())
+    }
+
+    @Test
+    fun `releasing a consumed pulse never queues it again`() = forEachPulse {
+        down(1)
+        assertTrue(consume())
+        router.up(1)
+        assertFalse(consume())
+    }
+
+    @Test
+    fun `completed and held pulses coalesce into one consumed command`() = forEachPulse {
+        down(1)
+        router.up(1)
+        down(2)
+        assertTrue(consume())
+        assertFalse(consume())
+        router.up(2)
+        assertFalse(consume())
+    }
+
+    @Test
+    fun `disabling pulse discards completed and held edges without replay after release`() = forEachPulse {
+        down(1)
+        router.up(1)
+        down(2)
+        router.setPulseEnabled(left = right, right = !right)
+        router.setPulseEnabled(true, true)
+        router.up(2)
+        assertFalse(consume())
+        down(3)
+        assertTrue(consume())
+    }
+
+    @Test
+    fun `cancel all clears both completed and held pulse edges`() = forEachPulse {
+        down(1)
+        router.up(1)
+        down(2)
+        router.cancelAll()
+        router.up(2)
+        assertFalse(consume())
+        down(3)
+        assertTrue(consume())
+    }
+
+    @Test
+    fun `canceling a pulse preserves the opposite completed pulse and drag ownership`() {
+        val router = TouchRouter(localVersus = true)
+        router.pulseAreas(TouchRect(100f, 0f, 100f, 100f), TouchRect(1000f, 0f, 100f, 100f))
+        assertTrue(router.down(1, 1050f, 50f, 360f, 360f))
+        router.up(1)
+        assertTrue(router.down(2, 150f, 50f, 360f, 360f))
+        assertTrue(router.down(3, 250f, 400f, 360f, 360f))
+        router.cancel(2)
+        router.cancel(99)
+        assertFalse(router.consumeLeftPulse())
+        assertTrue(router.consumeRightPulse())
+        assertTrue(router.move(3, 250f, 450f))
+        assertEquals(410f, router.leftTargetY)
+    }
+
+    private fun forEachPulse(check: PulseFixture.() -> Unit) {
+        assertAll(
+            "solo and both versus players",
+            listOf(false to false, true to false, true to true).map { (local, right) ->
+                Executable { PulseFixture(local, right).check() }
+            },
+        )
+    }
+
+    private class PulseFixture(local: Boolean, val right: Boolean) {
+        val router = TouchRouter(localVersus = local)
+        private val x = if (!local || right) 1050f else 150f
+
+        init {
+            router.pulseAreas(
+                TouchRect(if (local) 100f else 1000f, 0f, 100f, 100f),
+                if (local) TouchRect(1000f, 0f, 100f, 100f) else null,
+            )
+        }
+
+        fun down(pointer: Int) {
+            assertTrue(router.down(pointer, x, 50f, 360f, 360f))
+        }
+
+        fun consume(): Boolean = if (right) router.consumeRightPulse() else router.consumeLeftPulse()
     }
 }
