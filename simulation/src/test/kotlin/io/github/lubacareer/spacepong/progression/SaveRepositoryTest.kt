@@ -82,7 +82,7 @@ class SaveRepositoryTest {
         val save = CampaignProgression.recordVictory(CampaignSave(), 0, 0)
         repo.save(save)
         val backup = directory.resolve("campaign.backup.json")
-        val future = """{"version":2}"""
+        val future = """{"version":3}"""
         Files.writeString(backup, future)
         assertEquals(save, repo.load().save)
         assertTrue(repo.load().readOnly)
@@ -108,7 +108,7 @@ class SaveRepositoryTest {
 
     @Test
     fun `oversized future saves are preserved without parsing or overwriting`() {
-        val future = "{\"version\":2,\"futureData\":\"" + "x".repeat(70_000) + "\"}"
+        val future = "{\"version\":3,\"futureData\":\"" + "x".repeat(70_000) + "\"}"
         val primary = directory.resolve("campaign.json")
         Files.writeString(primary, future)
         val repo = SaveRepository(directory)

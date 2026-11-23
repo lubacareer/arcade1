@@ -13,11 +13,12 @@ import kotlinx.serialization.json.put
 
 /** Data-only JSON; no reflective or polymorphic object deserialization. */
 internal object SaveCodec {
-    private const val CURRENT_VERSION = 1
+    private const val CURRENT_VERSION = 2
 
     fun encode(save: CampaignSave): String = buildJsonObject {
         put("version", CURRENT_VERSION)
         put("bestMedals", JsonArray(save.bestMedals.map { JsonPrimitive(it) }))
+        put("brickBestScores", JsonArray(save.brickBestScores.map { JsonPrimitive(it) }))
         put(
             "upgrades",
             buildJsonObject {
@@ -49,7 +50,7 @@ internal object SaveCodec {
             ?: throw IllegalArgumentException("Save must contain a JSON object.")
         val version = root.requiredInt("version")
         if (version > CURRENT_VERSION) throw UnsupportedSaveVersionException(version)
-        require(version == CURRENT_VERSION) { "Unsupported legacy save version." }
+        require(version in 1..CURRENT_VERSION) { "Unsupported legacy save version." }
         val medals = root["bestMedals"] as? JsonArray
             ?: throw IllegalArgumentException("Missing best medals.")
         val ranks = root["upgrades"] as? JsonObject
@@ -68,6 +69,12 @@ internal object SaveCodec {
             ),
             tutorialSeen = root.optionalBoolean("tutorialSeen", false),
             settings = settings,
+            brickBestScores = if (version == 1) {
+                List(CampaignSave.BUILDING_COUNT) { 0 }
+            } else {
+                val scores = root["brickBestScores"] as? JsonArray ?: throw IllegalArgumentException("Missing building scores.")
+                scores.map { it.requireInt("Building score") }
+            },
         )
     }
 
