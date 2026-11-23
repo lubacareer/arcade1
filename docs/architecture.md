@@ -1,10 +1,12 @@
 # Architecture
 
-The simulation has no Android or libGDX dependency. Tick-indexed inputs drive a seeded match, and presentation reads state plus events. A fixed-step runner caps catch-up at eight ticks. Rendering interpolation and effects never determine scores, physics, or earned rewards.
+The simulation has no Android or libGDX dependency. Brick Buildings and Classic Pong have separate engines. Brick levels use top-to-bottom character grids for both collision geometry and menu previews. Tick-indexed inputs drive a seeded match, and presentation reads state plus events. A fixed-step runner caps catch-up at eight ticks. Rendering interpolation and effects never determine scores, physics, or earned rewards.
 
 Swept collisions account for the ball's whole path within a tick. A bounded collision loop prevents infinite resolution; contact position and paddle velocity determine returns, and speed/angle caps keep rallies playable. AI uses observed state, reaction intervals and seeded error rather than future random outcomes.
 
 Campaign progress is immutable. Unlocks derive from completed encounters, and available credits derive from medals minus upgrade spending. Victory updates one save snapshot. A best-result comparison prevents replay reward duplication. Local versus receives a base loadout independently of campaign state.
+
+Version 2 adds six independent best building scores. Zero denotes an uncleared building. Version 1 saves load with their Classic data intact and six zero scores. The next successful save writes version 2.
 
 Save JSON contains data only, with an explicit version and typed validation. Writes stage and force bytes before atomic replacement, retaining a last-good backup. Unknown future versions are preserved and disable writes. Active match state is intentionally not persisted.
 

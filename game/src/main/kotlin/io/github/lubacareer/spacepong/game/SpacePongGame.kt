@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.math.Matrix4
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.viewport.FitViewport
+import io.github.lubacareer.spacepong.bricks.BrickBuildings
 import io.github.lubacareer.spacepong.input.TouchRect
 import io.github.lubacareer.spacepong.input.TouchRouter
 import io.github.lubacareer.spacepong.progression.*
@@ -38,6 +39,9 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private var engine: MatchEngine? = null
     private var runner: FixedStepRunner? = null
     private var router = TouchRouter(false)
+    private var building: BrickPlaySession? = null
+    private var selectedBuilding = 0
+    private var buildingResult: BuildingResult? = null
     private var local = false
     private var selectedEncounter = 0
     private var result: ResultSummary? = null
@@ -71,7 +75,6 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             notice = "Storage is unavailable. Local duels still work; campaign saves are protected."
             Gdx.app.error("Save", "Unable to read campaign", error)
         }
-        if (save.bestMedals.any { it > 0 } || save.tutorialSeen) flow.show(Page.MAP)
         Gdx.input.inputProcessor = Controls()
         Gdx.input.setCatchKey(Input.Keys.BACK, true)
         platform.setHighRefresh(save.settings.highRefresh)
@@ -102,6 +105,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         canvas.projection(camera.combined)
         canvas.configureAccessibility(save.settings.largeText, save.settings.highContrast)
         canvas.background(elapsed, save.settings.reducedMotion, save.settings.lowEffects)
+        if (flow.page == Page.MATCH || flow.page == Page.PAUSE) building?.draw(canvas, save.settings)
         val currentEngine = engine
         if ((flow.page == Page.MATCH || flow.page == Page.PAUSE) && currentEngine != null) {
             if (save.settings.screenShake && !save.settings.reducedMotion) {
@@ -120,13 +124,13 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             canvas.projection(camera.combined)
         }
         if (flow.page == Page.MATCH) {
-            currentButtons = matchButtons()
+            currentButtons = building?.let { listOf(it.pauseButton) } ?: matchButtons()
             if (tutorial > 0) {
                 canvas.rounded(skipTutorial.x, skipTutorial.y, skipTutorial.width, skipTutorial.height, 12f, Palette.panel, .9f)
                 canvas.centered("SKIP", skipTutorial.x + skipTutorial.width / 2, skipTutorial.y + 59, 22f, Palette.muted, true)
             }
         } else {
-            menus.render(flow.page, save, flow.focused, result, notice, readOnly, elapsed)
+            menus.render(flow.page, save, flow.focused, result, notice, readOnly, elapsed, building != null, buildingResult)
             currentButtons = menus.buttons
             if (commits.canRetry) {
                 canvas.rounded(retrySave.x, retrySave.y, retrySave.width, retrySave.height, 12f, Palette.amber)
@@ -143,8 +147,18 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private fun matchButtons(): List<MenuButton> = if (tutorial > 0) listOf(arena.pauseButton, skipTutorial) else listOf(arena.pauseButton)
 
     private fun updateMatch(delta: Float) {
-        val active = engine ?: return
         if (flow.page != Page.MATCH) return
+        building?.let { session ->
+            session.update(delta)
+            session.won?.let { won ->
+                buildingResult = BuildingResult(selectedBuilding, won, session.score)
+                if (won) persist(CampaignProgression.recordBrickVictory(save, selectedBuilding, session.score))
+                clearInput()
+                flow.show(Page.RESULTS)
+            }
+            return
+        }
+        val active = engine ?: return
         syncPulseAvailability()
         val touchLeftPulse = router.consumeLeftPulse()
         val touchRightPulse = router.consumeRightPulse()
@@ -194,6 +208,30 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
 
     private fun axis(positive: Int, negative: Int) = (if (heldKeys[positive]) 1.0 else 0.0) - (if (heldKeys[negative]) 1.0 else 0.0)
 
+    private fun startBuilding(index: Int) {
+        if (pendingSave != null || readOnly || !save.isBuildingUnlocked(index)) {
+            notice = commits.error ?: notice ?: "This building is unavailable."
+            openMenu(Page.BUILDINGS)
+            return
+        }
+        abandonMatch()
+        local = false
+        selectedBuilding = index
+        building = BrickPlaySession(index) { sound, strong ->
+            audio.effect(sound, save.settings)
+            if (strong != null && save.settings.haptics) platform.haptic(strong)
+        }
+        notice = null
+        flow.show(Page.MATCH)
+        audio.activate(save.settings)
+    }
+
+    private fun openMenu(page: Page) {
+        abandonMatch()
+        flow.show(page)
+        audio.activate(save.settings)
+    }
+
     private fun startMatch(encounter: Int, localVersus: Boolean = false) {
         if (!localVersus && pendingSave != null) {
             notice = commits.error ?: "Save your pending progress before starting another encounter."
@@ -205,7 +243,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             flow.show(Page.MAP)
             return
         }
-        clearInput()
+        abandonMatch()
         local = localVersus
         selectedEncounter = encounter
         result = null
@@ -304,6 +342,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
 
     private fun action(id: String) {
         when {
+            id.startsWith("building-") -> startBuilding(id.substringAfter('-').toInt())
             id.startsWith("encounter-") -> startMatch(id.substringAfter('-').toInt())
             id.startsWith("buy-") -> {
                 val track = UpgradeTrack.entries[id.substringAfter('-').toInt()]
@@ -311,13 +350,19 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
             }
             id.startsWith("setting-") -> changeSetting(id.removePrefix("setting-"))
             else -> when (id) {
-                "continue", "map" -> {
-                    abandonMatch()
-                    flow.show(Page.MAP)
-                    audio.activate(save.settings)
-                }
+                "buildings" -> openMenu(Page.BUILDINGS)
+                "classic" -> openMenu(Page.CLASSIC)
+                "continue" -> openMenu(Page.MAP)
+                "map" -> openMenu(
+                    when {
+                        building != null -> Page.BUILDINGS
+                        local -> Page.CLASSIC
+                        else -> Page.MAP
+                    },
+                )
                 "home" -> {
-                    if (flow.page == Page.CONFIRM_NEW) {
+                    val previous = flow.page
+                    if (previous == Page.CONFIRM_NEW || previous == Page.CONFIRM_BRICKS) {
                         if (!flow.cancelReset(commits, pendingReset)) {
                             notice = commits.error
                             return
@@ -325,16 +370,22 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                         pendingReset = null
                         notice = commits.error
                     }
-                    abandonMatch()
-                    flow.show(Page.START)
-                    audio.activate(save.settings)
+                    openMenu(
+                        when (previous) {
+                            Page.CONFIRM_BRICKS -> Page.BUILDINGS
+                            Page.CONFIRM_NEW -> Page.CLASSIC
+                            else -> Page.START
+                        },
+                    )
                 }
                 "local" -> startMatch(0, true)
+                "new-bricks" -> flow.show(Page.CONFIRM_BRICKS)
                 "new" -> flow.show(Page.CONFIRM_NEW)
                 "confirm-new" -> {
-                    val reset = CampaignSave(settings = save.settings)
+                    val brickReset = flow.page == Page.CONFIRM_BRICKS
+                    val reset = if (brickReset) CampaignProgression.resetBricks(save) else CampaignProgression.resetClassic(save)
                     if (persist(reset)) {
-                        flow.show(Page.MAP)
+                        openMenu(if (brickReset) Page.BUILDINGS else Page.MAP)
                     } else if (commits.pending == reset) {
                         pendingReset = reset
                     }
@@ -353,12 +404,13 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                         return
                     }
                     clearInput()
+                    building?.resume()
                     if (tutorial == 0) engine?.resume()
                     runner?.clear()
                     flow.show(Page.MATCH)
                     audio.activate(save.settings)
                 }
-                "retry" -> startMatch(selectedEncounter, local)
+                "retry" -> if (building != null) startBuilding(selectedBuilding) else startMatch(selectedEncounter, local)
                 "tutorial-skip" -> finishTutorial()
                 "result-next" -> {
                     val current = result ?: return
@@ -378,7 +430,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                 "save-retry" -> if (commits.canRetry) {
                     pendingSave?.let {
                         val isReset = pendingReset == it
-                        if (persist(it) && isReset) flow.show(Page.MAP)
+                        if (persist(it) && isReset) openMenu(if (flow.page == Page.CONFIRM_BRICKS) Page.BUILDINGS else Page.MAP)
                     }
                 }
             }
@@ -406,6 +458,11 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private fun cycleVolume(value: Float) = ((kotlin.math.round(value * 5).toInt() + 1) % 6) / 5f
 
     private fun abandonMatch() {
+        building?.pause()
+        building = null
+        buildingResult = null
+        result = null
+        local = false
         engine?.pause()
         engine = null
         runner = null
@@ -416,6 +473,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     /** Call on the render thread (Android adapters post here after OS interruption callbacks). */
     fun pauseForInterruption() {
         if (!initialized) return
+        building?.pause()
         engine?.pause()
         runner?.clear()
         flow.interrupt()
@@ -443,6 +501,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
 
     private fun clearInput() {
         heldKeys.fill(false)
+        building?.clearInput()
         router.cancelAll()
         pressedButtons.clear()
         leftPulse = false
@@ -452,16 +511,17 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     fun diagnostics(): GameDiagnostics {
         val state = engine?.state
         return GameDiagnostics(
-            flow.page.name, state?.phase?.name, state?.config?.encounter?.name,
+            flow.page.name, building?.phaseName ?: state?.phase?.name, building?.let { BrickBuildings.levels[selectedBuilding].name } ?: state?.config?.encounter?.name,
             state?.leftScore ?: 0, state?.rightScore ?: 0, state?.leftHull ?: 0, state?.rightHull ?: 0,
             state?.left?.y ?: 0.0, state?.right?.y ?: 0.0, state?.left?.pulseCooldownSeconds ?: 0.0, state?.right?.pulseCooldownSeconds ?: 0.0,
             tutorial, (drill?.ghostY ?: 360f).toDouble(),
+            building?.lives ?: 0, building?.score ?: 0, building?.paddleX ?: 0.0,
         )
     }
 
     fun uiTargets(): List<UiTarget> {
         if (renderedButtonsPage != flow.page) return emptyList()
-        val targets = if (flow.page == Page.MATCH) {
+        val targets = if (flow.page == Page.MATCH && building == null) {
             currentButtons + if (local) {
                 listOf(arena.versusLeftPulse.copy(enabled = pulseAvailable(Side.LEFT)), arena.versusRightPulse.copy(enabled = pulseAvailable(Side.RIGHT)))
             } else {
@@ -504,6 +564,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                 return true
             }
             if (flow.page == Page.MATCH) {
+                building?.let { return it.down(pointer, p.x, p.y) }
                 val state = engine?.state ?: return false
                 syncPulseAvailability()
                 return router.down(pointer, p.x, p.y, leftDragOrigin(drill, state.left.y.toFloat()), state.right.y.toFloat())
@@ -514,19 +575,21 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean {
             if (pressedButtons.containsKey(pointer)) return true
             val p = coordinates(screenX, screenY)
-            return flow.page == Page.MATCH && router.move(pointer, p.x, p.y)
+            return flow.page == Page.MATCH && (building?.drag(pointer, p.x, p.y) ?: router.move(pointer, p.x, p.y))
         }
 
         override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+            val p = coordinates(screenX, screenY)
+            building?.up(pointer, p.x, p.y)
             router.up(pointer)
             val captured = pressedButtons.remove(pointer) ?: return true
-            val p = coordinates(screenX, screenY)
             if (captured.first == flow.page && captured.second.contains(p.x, p.y)) action(captured.second.id)
             return true
         }
 
         override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
             pressedButtons.remove(pointer)
+            building?.cancel(pointer)
             router.cancel(pointer)
             return true
         }
@@ -539,11 +602,13 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
                     Page.SETTINGS -> action("settings-back")
                     Page.PAUSE -> action("resume")
                     Page.UPGRADES, Page.RESULTS, Page.COMPLETE -> action("map")
+                    Page.MAP -> action("classic")
                     else -> action("home")
                 }
                 return true
             }
             if (flow.page == Page.MATCH) {
+                building?.let { return it.keyDown(keycode) }
                 if (keycode == Input.Keys.SHIFT_LEFT && pulseAvailable(Side.LEFT)) leftPulse = true
                 if (keycode == Input.Keys.SHIFT_RIGHT && pulseAvailable(Side.RIGHT)) rightPulse = true
             } else {
@@ -558,6 +623,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
         }
 
         override fun keyUp(keycode: Int): Boolean {
+            building?.keyUp(keycode)
             if (keycode in heldKeys.indices) heldKeys[keycode] = false
             return true
         }

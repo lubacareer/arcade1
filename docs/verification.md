@@ -1,5 +1,13 @@
 # Verification
 
+## Brick Buildings, 23 November 2026
+
+The offline Gradle build passed all 137 Kotlin tests (91 simulation and persistence, 46 shared game tests), formatting, Android lint, debug APK assembly, and release AAB packaging. All 47 Python tooling tests passed. The local API 26 emulator passed six instrumentation tests, including a horizontal drag, tap to launch, explicit resume, campaign selection, and four-pointer Classic versus. Version 1 save fixtures retain Classic progress when opened in version 2.
+
+A headless controller sampled ball positions at 10 Hz and steered the speed-limited paddle with ordinary inputs. It cleared Outpost, Hangar, Twin Towers, Observatory, Launch Gantry, and Orbital Citadel in approximately 30, 57, 67, 71, 66, and 115 seconds respectively.
+
+## First Contact, 16 November 2026
+
 Local verification completed on **16 November 2026**. These results cover the first chapter implementation and its Android/desktop builds.
 
 | Check | Result |

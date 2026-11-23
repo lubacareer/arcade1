@@ -5,7 +5,7 @@ plugins {
 }
 allprojects {
     group = "io.github.lubacareer.spacepong"
-    version = "0.1.0"
+    version = "0.2.0"
     dependencyLocking { lockAllConfigurations() }
 }
 tasks.named("check") { dependsOn(":simulation:check", ":game:check", ":desktop:check", ":android:lintDebug") }

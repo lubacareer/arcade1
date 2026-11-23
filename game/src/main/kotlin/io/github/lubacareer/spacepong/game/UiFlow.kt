@@ -1,6 +1,6 @@
 package io.github.lubacareer.spacepong.game
 
-enum class Page { START, MAP, UPGRADES, SETTINGS, MATCH, PAUSE, RESULTS, COMPLETE, CONFIRM_NEW }
+enum class Page { START, CLASSIC, BUILDINGS, MAP, UPGRADES, SETTINGS, MATCH, PAUSE, RESULTS, COMPLETE, CONFIRM_NEW, CONFIRM_BRICKS }
 
 /** Navigation never resumes a match implicitly after an OS interruption or settings visit. */
 class UiFlow {
