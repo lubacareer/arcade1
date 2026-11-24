@@ -1,10 +1,12 @@
 # Architecture
 
-The simulation has no Android or libGDX dependency. Tick-indexed inputs drive a seeded match, and presentation reads state plus events. A fixed-step runner caps catch-up at eight ticks. Rendering interpolation and effects never determine scores, physics, or earned rewards.
+The simulation has no Android or libGDX dependency. Brick Buildings and Classic Pong have separate engines. Brick levels use top-to-bottom character grids for both collision geometry and menu previews. Tick-indexed inputs drive a seeded match, and presentation reads state plus events. Classic Pong caps catch-up at eight ticks per render. Brick Buildings advances up to twelve 120 Hz ticks per render and retains remaining time. A backlog over 250 ms pauses the session until the player resumes. Rendering interpolation and effects never determine scores, physics, or earned rewards.
 
-Swept collisions account for the ball's whole path within a tick. A bounded collision loop prevents infinite resolution; contact position and paddle velocity determine returns, and speed/angle caps keep rallies playable. AI uses observed state, reaction intervals and seeded error rather than future random outcomes.
+Swept collisions account for the ball's whole path within a tick. Brick pickups share the same timeline as ball contacts, so a catch applies when the falling pickup first touches the moving paddle. A bounded collision loop prevents infinite resolution; contact position and paddle velocity determine returns, and speed/angle caps keep rallies playable. AI uses observed state, reaction intervals and seeded error rather than future random outcomes.
 
 Campaign progress is immutable. Unlocks derive from completed encounters, and available credits derive from medals minus upgrade spending. Victory updates one save snapshot. A best-result comparison prevents replay reward duplication. Local versus receives a base loadout independently of campaign state.
+
+Version 3 stores positive winning scores under permanent building IDs. An absent score means the building has yet to be cleared. Completed buildings and the first uncleared building in display order are playable. Version 1 loads with Classic data intact and an empty building record. Version 2 maps its six positions to the original building IDs in release order. Loading leaves the original bytes in place. The next successful save writes version 3 and preserves scores for IDs outside the current catalog.
 
 Save JSON contains data only, with an explicit version and typed validation. Writes stage and force bytes before atomic replacement, retaining a last-good backup. Unknown future versions are preserved and disable writes. Active match state is intentionally not persisted.
 
@@ -26,7 +28,7 @@ To update an SDK pin, obtain the package metadata and archive from Google's offi
 
 ## Save failure and concurrency boundaries
 
-Repositories in the same process coordinate by canonical save directory and reject stale snapshots instead of merging conflicting reset, purchase, or reward transactions. A conflict preserves the newer disk save and asks the player to reopen the game. Separate desktop processes must not share an active save directory.
+Repositories in the same process coordinate by canonical save directory. Every writer acquires an exclusive operating-system lock on the permanent `.campaign.lock` file before checking the current revision. It holds that lock through backup and primary publication and the final directory flush. A busy writer can retry. Replacing an existing snapshot requires a prior load, and a stale revision preserves the newer save and asks the player to reopen the game.
 
 Save preparation creates missing directories one at a time and forces each parent entry before creating descendants or staging bytes. Existing directory entries are forced again on retry, including through a fresh repository instance. Snapshot bytes are forced before atomic replacement. Android and other POSIX platforms also force the containing directory after each replacement. Windows NIO does not support opening directory channels, so the desktop runner guarantees file flushing and atomic replacement there, without claiming equivalent power-loss durability.
 

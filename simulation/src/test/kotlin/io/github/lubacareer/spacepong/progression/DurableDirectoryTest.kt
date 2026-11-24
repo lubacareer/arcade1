@@ -91,7 +91,9 @@ class DurableDirectoryTest {
         assertEquals("prepare failed", failure.message)
         assertArrayEquals(primary, Files.readAllBytes(directory.resolve("campaign.json")))
         assertArrayEquals(backup, Files.readAllBytes(directory.resolve("campaign.backup.json")))
-        Files.list(directory).use { assertEquals(2L, it.count()) }
+        Files.list(directory).use { files ->
+            assertEquals(setOf("campaign.json", "campaign.backup.json", ".campaign.lock"), files.map { it.fileName.toString() }.toList().toSet())
+        }
     }
 
     @Test

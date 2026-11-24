@@ -21,7 +21,7 @@ fun main(args: Array<String>) {
         }
     }
     val config = Lwjgl3ApplicationConfiguration().apply {
-        setTitle("Space Pong | First Contact")
+        setTitle("Space Pong")
         setInitialVisible(!smoke)
         setWindowedMode(1280, 720)
         setWindowSizeLimits(640, 360, -1, -1)

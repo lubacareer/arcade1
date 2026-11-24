@@ -3,6 +3,7 @@ package io.github.lubacareer.spacepong.progression
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.channels.OverlappingFileLockException
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
@@ -31,7 +32,8 @@ class SaveDurabilityException(cause: IOException) : IOException("Campaign was wr
  * Keeps complete snapshots under a caller-provided app-private directory.
  * Both staged files and replacement targets are on the same filesystem.
  * A failed replacement leaves the previous primary/backup available.
- * Instances in this process coordinate by canonical directory and reject stale snapshots.
+ * A permanent sidecar serializes writer transactions across processes. The local
+ * monitor also coordinates repositories referring to the same canonical directory.
  * Call load before editing an existing campaign; conflicts require reloading its current state.
  * POSIX systems flush new directory entries before publication and each replacement afterward.
  * Windows NIO cannot open directory channels,
@@ -50,6 +52,7 @@ class SaveRepository internal constructor(
 
     private val primary = this.directory.resolve("campaign.json")
     private val backup = this.directory.resolve("campaign.backup.json")
+    private val writerLock = this.directory.resolve(".campaign.lock")
 
     fun load(): SaveLoadResult = synchronized(accessLock) { loadUnlocked() }
 
@@ -92,10 +95,20 @@ class SaveRepository internal constructor(
         )
     }
 
-    fun save(save: CampaignSave) = synchronized(accessLock) { saveUnlocked(save) }
-
-    private fun saveUnlocked(save: CampaignSave) {
+    fun save(save: CampaignSave) = synchronized(accessLock) {
         ensureDurableDirectory(directory, syncDirectory)
+        // Keep one stable inode: the snapshots are atomically replaced and cannot be lock targets.
+        FileChannel.open(writerLock, StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
+            val lock = try {
+                channel.tryLock()
+            } catch (_: OverlappingFileLockException) {
+                null
+            } ?: throw IOException("Another writer is saving the campaign. Retry the save.")
+            lock.use { saveLocked(save) }
+        }
+    }
+
+    private fun saveLocked(save: CampaignSave) {
         val current = read(primary)
         val previousBackup = read(backup)
         listOf(current, previousBackup).forEach {
@@ -105,9 +118,13 @@ class SaveRepository internal constructor(
                 else -> Unit
             }
         }
+        if (!hasObservedPrimary && (current !is ReadResult.Missing || previousBackup !is ReadResult.Missing)) {
+            throw SaveConflictException()
+        }
         if (hasObservedPrimary && observedPrimary != revision(current)) throw SaveConflictException()
         remember(current)
         val encoded = SaveCodec.encode(save).toByteArray(StandardCharsets.UTF_8)
+        if (encoded.size > MAX_SAVE_BYTES) throw IOException("Campaign exceeds the supported save size.")
         val pending = stage(encoded)
         try {
             // Never replace a healthy backup with a primary known to be corrupt.

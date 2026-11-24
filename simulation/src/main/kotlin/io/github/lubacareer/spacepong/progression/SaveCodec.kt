@@ -13,11 +13,15 @@ import kotlinx.serialization.json.put
 
 /** Data-only JSON; no reflective or polymorphic object deserialization. */
 internal object SaveCodec {
-    private const val CURRENT_VERSION = 1
+    private const val CURRENT_VERSION = 3
+
+    // Frozen mapping from the released v2 format. Never derive it from current display order.
+    private val v2BuildingOrder = listOf("outpost", "hangar", "twin_towers", "observatory", "launch_gantry", "orbital_citadel")
 
     fun encode(save: CampaignSave): String = buildJsonObject {
         put("version", CURRENT_VERSION)
         put("bestMedals", JsonArray(save.bestMedals.map { JsonPrimitive(it) }))
+        put("brickBestScores", JsonObject(save.brickBestScores.mapValues { JsonPrimitive(it.value) }))
         put(
             "upgrades",
             buildJsonObject {
@@ -49,7 +53,7 @@ internal object SaveCodec {
             ?: throw IllegalArgumentException("Save must contain a JSON object.")
         val version = root.requiredInt("version")
         if (version > CURRENT_VERSION) throw UnsupportedSaveVersionException(version)
-        require(version == CURRENT_VERSION) { "Unsupported legacy save version." }
+        require(version in 1..CURRENT_VERSION) { "Unsupported legacy save version." }
         val medals = root["bestMedals"] as? JsonArray
             ?: throw IllegalArgumentException("Missing best medals.")
         val ranks = root["upgrades"] as? JsonObject
@@ -68,7 +72,21 @@ internal object SaveCodec {
             ),
             tutorialSeen = root.optionalBoolean("tutorialSeen", false),
             settings = settings,
+            brickBestScores = decodeBuildingScores(version, root["brickBestScores"]),
         )
+    }
+
+    private fun decodeBuildingScores(version: Int, value: JsonElement?): Map<String, Int> {
+        if (version == 1) return emptyMap()
+        if (version == 2) {
+            val array = value as? JsonArray ?: throw IllegalArgumentException("Missing v2 building scores.")
+            val scores = array.map { it.requireInt("Building score") }
+            require(scores.size == v2BuildingOrder.size && scores.all { it >= 0 }) { "Invalid v2 building scores." }
+            require(scores.dropWhile { it > 0 }.all { it == 0 }) { "Invalid v2 building sequence." }
+            return v2BuildingOrder.zip(scores).toMap().filterValues { it > 0 }
+        }
+        val records = value as? JsonObject ?: throw IllegalArgumentException("Missing building records.")
+        return records.mapValues { it.value.requireInt("Building score") }
     }
 
     private fun decodeSettings(root: JsonObject): GameSettings {

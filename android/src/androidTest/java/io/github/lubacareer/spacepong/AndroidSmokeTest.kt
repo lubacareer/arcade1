@@ -95,6 +95,55 @@ class AndroidSmokeTest {
         }
     }
 
+    @Test fun brickCampaignLaunchesPausesAndReturnsToBothCampaigns() {
+        ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
+            var activity: AndroidLauncher? = null
+            scenario.onActivity { activity = it }
+            val app = checkNotNull(activity)
+            SystemClock.sleep(1200)
+            dismissSystemTutorial()
+            awaitPage(app, "START")
+            tap(app, "buildings")
+            awaitPage(app, "BUILDINGS")
+            tap(app, "building-0")
+            val docked = awaitPage(app, "MATCH")
+            assertEquals("DOCKED", docked.matchPhase)
+            assertEquals(3, docked.buildingLives)
+            assertTrue(device.swipe(device.displayWidth / 3, device.displayHeight / 2, device.displayWidth / 2, device.displayHeight / 2, 18))
+            val movementDeadline = SystemClock.uptimeMillis() + 5000
+            val minimumX = docked.buildingPaddleX + 20
+            var moved = onGame { app.game.diagnostics() }
+            while (moved.page == "MATCH" && moved.matchPhase == "DOCKED" && moved.buildingPaddleX <= minimumX && SystemClock.uptimeMillis() < movementDeadline) {
+                SystemClock.sleep(50)
+                moved = onGame { app.game.diagnostics() }
+            }
+            assertEquals("MATCH", moved.page)
+            assertEquals("DOCKED", moved.matchPhase)
+            assertTrue("Horizontal drag should move the docked paddle: $docked -> $moved", moved.buildingPaddleX > minimumX)
+            awaitWindowFocus(app)
+            assertTrue(device.click(device.displayWidth / 2, device.displayHeight * 2 / 3))
+            val deadline = SystemClock.uptimeMillis() + 5000
+            while (onGame { app.game.diagnostics().matchPhase } == "DOCKED" && SystemClock.uptimeMillis() < deadline) {
+                SystemClock.sleep(20)
+            }
+            assertEquals("PLAYING", onGame { app.game.diagnostics().matchPhase })
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            assertEquals("PAUSED", awaitPage(app, "PAUSE").matchPhase)
+            tap(app, "resume")
+            awaitPage(app, "MATCH")
+            tap(app, "pause")
+            tap(app, "map")
+            awaitPage(app, "BUILDINGS")
+            tap(app, "home")
+            tap(app, "classic")
+            tap(app, "continue")
+            awaitPage(app, "MAP")
+            tap(app, "encounter-0")
+            assertEquals("FLIGHT_SCHOOL", awaitPage(app, "MATCH").encounter)
+        }
+    }
+
     @Test fun localVersusSupportsFourPointersAndExplicitResume() {
         ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
             var activity: AndroidLauncher? = null
@@ -102,7 +151,7 @@ class AndroidSmokeTest {
             val app = activity!!
             SystemClock.sleep(1200)
             dismissSystemTutorial()
-            if (onGame { app.game.diagnostics().page } == "MAP") tap(app, "home")
+            tap(app, "classic")
             tap(app, "local")
             awaitPage(app, "MATCH")
             val playingDeadline = SystemClock.uptimeMillis() + 15000

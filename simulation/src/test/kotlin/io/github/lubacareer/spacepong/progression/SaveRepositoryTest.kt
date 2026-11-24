@@ -82,7 +82,7 @@ class SaveRepositoryTest {
         val save = CampaignProgression.recordVictory(CampaignSave(), 0, 0)
         repo.save(save)
         val backup = directory.resolve("campaign.backup.json")
-        val future = """{"version":2}"""
+        val future = """{"version":4}"""
         Files.writeString(backup, future)
         assertEquals(save, repo.load().save)
         assertTrue(repo.load().readOnly)
@@ -108,7 +108,7 @@ class SaveRepositoryTest {
 
     @Test
     fun `oversized future saves are preserved without parsing or overwriting`() {
-        val future = "{\"version\":2,\"futureData\":\"" + "x".repeat(70_000) + "\"}"
+        val future = "{\"version\":4,\"futureData\":\"" + "x".repeat(70_000) + "\"}"
         val primary = directory.resolve("campaign.json")
         Files.writeString(primary, future)
         val repo = SaveRepository(directory)
@@ -172,6 +172,7 @@ class SaveRepositoryTest {
         val repo = SaveRepository(directory) { path ->
             if (path == directory) throw java.io.IOException("disk flush failed")
         }
+        repo.load()
         val failure = assertThrows(java.io.IOException::class.java) { repo.save(second) }
         assertFalse(failure is SaveDurabilityException)
         assertEquals(first, SaveRepository(directory).load().save)

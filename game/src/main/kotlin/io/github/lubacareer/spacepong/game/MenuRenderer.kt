@@ -1,6 +1,8 @@
 package io.github.lubacareer.spacepong.game
 
 import com.badlogic.gdx.graphics.Color
+import io.github.lubacareer.spacepong.bricks.BrickBuildings
+import io.github.lubacareer.spacepong.bricks.BrickLevel
 import io.github.lubacareer.spacepong.progression.CampaignSave
 import kotlin.math.cos
 import kotlin.math.sin
@@ -27,6 +29,8 @@ data class ResultSummary(
     val encounter: Int,
 )
 
+data class BuildingResult(val building: Int, val won: Boolean, val score: Int)
+
 class MenuRenderer(private val canvas: Canvas) {
     val buttons = mutableListOf<MenuButton>()
     private var focused = -1
@@ -41,19 +45,23 @@ class MenuRenderer(private val canvas: Canvas) {
         notice: String?,
         readOnly: Boolean,
         time: Float,
+        brickMatch: Boolean,
+        buildingResult: BuildingResult?,
     ) {
         buttons.clear()
         focused = focus
         canvas.configureAccessibility(save.settings.largeText, save.settings.highContrast)
         when (page) {
-            Page.START -> start(save, time)
+            Page.START -> home()
+            Page.CLASSIC -> classic(save, time)
+            Page.BUILDINGS -> buildings(save, readOnly)
             Page.MAP -> map(save, readOnly)
             Page.UPGRADES -> upgrades(save, readOnly)
             Page.SETTINGS -> settings(save)
-            Page.PAUSE -> pause()
-            Page.RESULTS -> results(result)
+            Page.PAUSE -> pause(brickMatch)
+            Page.RESULTS -> if (buildingResult != null) buildingResults(buildingResult, save) else results(result)
             Page.COMPLETE -> complete()
-            Page.CONFIRM_NEW -> confirmNew(readOnly)
+            Page.CONFIRM_NEW, Page.CONFIRM_BRICKS -> confirmNew(readOnly, page == Page.CONFIRM_BRICKS)
             Page.MATCH -> Unit
         }
         if (notice != null) canvas.wrap(notice, 64f, 35f, 1120f, 15f, Palette.amber)
@@ -105,15 +113,90 @@ class MenuRenderer(private val canvas: Canvas) {
         buttons += MenuButton(id, x, y, width, height, title, enabled, primary)
     }
 
-    private fun start(save: CampaignSave, time: Float) {
-        canvas.text("AN OFFLINE ARCADE ADVENTURE", 72f, 658f, 16f, Palette.cyan, true)
+    private fun home() {
+        canvas.text("Space Pong", 76f, 584f, 80f, Palette.ink, true)
+        canvas.wrap("Aim your returns and break through six orbital buildings.", 80f, 450f, 495f, 28f)
+        button("buildings", "BRICK BUILDINGS", 80f, 250f, 470f, primary = true)
+        button("classic", "CLASSIC PONG", 80f, 136f, 285f)
+        button("settings", "SETTINGS", 379f, 136f, 171f)
+        val preview = BrickBuildings.levels[2]
+        skyline(preview, 914f, 450f, 458f, 165f)
+        canvas.line(823f, 189f, 937f, 351f, 2f, Palette.cyan, .55f)
+        canvas.circle(937f, 351f, 9f, Palette.ink)
+        canvas.rounded(758f, 172f, 130f, 13f, 6f, Palette.cyan)
+    }
+
+    private fun skyline(level: BrickLevel, x: Float, y: Float, width: Float, height: Float, dim: Boolean = false) {
+        val rows = level.rows
+        val cell = minOf(width / rows.first().length, height / (rows.size * .56f))
+        val stepY = cell * .56f
+        val left = x - rows.first().length * cell / 2
+        val top = y + rows.size * stepY / 2
+        rows.forEachIndexed { row, cells ->
+            cells.forEachIndexed { column, tile ->
+                if (tile != '.') {
+                    val color = when (tile) {
+                        'W' -> Palette.pink
+                        'S' -> Palette.amber
+                        else -> Palette.cyan
+                    }
+                    canvas.rect(left + column * cell, top - (row + 1) * stepY, cell * .92f, stepY * .87f, color, if (dim) .35f else .9f)
+                }
+            }
+        }
+    }
+
+    private fun buildings(save: CampaignSave, readOnly: Boolean) {
+        header("BRICK BUILDINGS", "Choose a building", "Clear every brick to unlock the next building.")
+        BrickBuildings.levels.forEachIndexed { index, level ->
+            val x = 64f + (index % 3) * 390f
+            val y = 324f - (index / 3) * 174f
+            val unlocked = save.isBuildingUnlocked(level.id)
+            val best = save.brickBestScores[level.id] ?: 0
+            val status = when {
+                !unlocked -> "LOCKED"
+                best > 0 -> "BEST  $best"
+                else -> "PLAY"
+            }
+            button("building-$index", level.name, x, y, 366f, 100f, enabled = unlocked && !readOnly, primary = unlocked && best == 0)
+            skyline(level, x + 56f, y + 126f, 96f, 39f, !unlocked)
+            canvas.text(status, x + 124f, y + 140f, 18f, if (unlocked) Palette.amber else Palette.muted, true)
+        }
+        button("home", "MAIN MENU", 64f, 40f, 280f)
+        if (save.brickBestScores.isNotEmpty()) button("new-bricks", "RESET BUILDINGS", 896f, 40f, 314f, enabled = !readOnly)
+    }
+
+    private fun buildingResults(result: BuildingResult, save: CampaignSave) {
+        val level = BrickBuildings.levels[result.building]
+        canvas.centered(level.name, 640f, 619f, 29f, Palette.cyan, true)
+        val best = save.brickBestScores[level.id]
+        val next = BrickBuildings.levels.indexOfFirst { it.id !in save.brickBestScores }
+        val title = when {
+            !result.won -> "Out of lives"
+            next < 0 -> "All buildings cleared!"
+            else -> "Building cleared!"
+        }
+        canvas.centered(title, 640f, 529f, 56f, Palette.ink, true)
+        canvas.centered("Score   ${result.score}", 640f, 427f, 36f, Palette.ink, true)
+        if (best != null) canvas.centered("Best clear   $best", 640f, 364f, 25f, Palette.amber)
+        if (result.won && next >= 0 && next != result.building) {
+            button("building-$next", "NEXT BUILDING", 654f, 207f, 330f, primary = true)
+            button("retry", "PLAY AGAIN", 298f, 207f, 330f)
+        } else {
+            button("retry", if (result.won) "PLAY AGAIN" else "TRY AGAIN", 472f, 207f, 336f, primary = !result.won)
+        }
+        button("buildings", "BUILDING SELECT", 472f, 89f, 336f)
+    }
+
+    private fun classic(save: CampaignSave, time: Float) {
+        canvas.text("CLASSIC PONG", 72f, 658f, 16f, Palette.cyan, true)
         canvas.text("SPACE", 66f, 588f, 90f, Palette.ink, true)
         canvas.text("PONG", 66f, 479f, 90f, Palette.cyan, true)
         canvas.text("F I R S T   C O N T A C T", 74f, 360f, 21f, Palette.amber)
         canvas.wrap("One paddle. Four encounters.\nA signal worth chasing.", 76f, 311f, 510f, 24f)
         button("continue", if (save.bestMedals.any { it > 0 }) "CONTINUE FLIGHT  >" else "ENTER THE SECTOR  >", 76f, 149f, 438f, 96f, primary = true)
         button("local", "LOCAL DUEL", 76f, 42f, 210f, 96f)
-        button("settings", "SETTINGS", 304f, 42f, 210f, 96f)
+        button("home", "MAIN MENU", 304f, 42f, 210f, 96f)
         button("new", "NEW FLIGHT", 1036f, 604f, 180f, 96f)
         hero(938f, 366f, time, save.settings.reducedMotion)
         canvas.text("01 / THE ORION REACH", 750f, 143f, 18f, Palette.cyan, true)
@@ -277,13 +360,13 @@ class MenuRenderer(private val canvas: Canvas) {
 
     private fun onOff(value: Boolean) = if (value) "ON" else "OFF"
 
-    private fun pause() {
+    private fun pause(bricks: Boolean) {
         canvas.rect(0f, 0f, 1280f, 720f, Palette.background, .89f)
         canvas.centered("SIGNAL HELD", 640f, 582f, 17f, Palette.cyan, true)
         canvas.centered("Take a breath.", 640f, 530f, 54f, Palette.ink, true)
         canvas.centered("Your flight is paused. Resume when you are ready.", 640f, 450f, 23f, Palette.muted)
         button("resume", "RESUME FLIGHT", 430f, 310f, 420f, primary = true)
-        button("retry", "RESTART MATCH", 430f, 198f, 420f)
+        button("retry", if (bricks) "RESTART BUILDING" else "RESTART MATCH", 430f, 198f, 420f)
         button("settings", "SETTINGS", 430f, 86f, 200f, 96f)
         button("map", "LEAVE MATCH", 650f, 86f, 200f, 96f)
     }
@@ -350,7 +433,13 @@ class MenuRenderer(private val canvas: Canvas) {
         button("map", "RETURN TO THE SECTOR", 430f, 144f, 420f, primary = true)
     }
 
-    private fun confirmNew(readOnly: Boolean) {
+    private fun confirmNew(readOnly: Boolean, bricks: Boolean) {
+        if (bricks) {
+            header("BRICK BUILDINGS", "Reset building progress?", "This clears all six building scores and unlocks.")
+            button("confirm-new", "RESET BUILDINGS", 64f, 218f, 360f, enabled = !readOnly)
+            button("home", "KEEP MY PROGRESS", 454f, 218f, 360f, primary = true)
+            return
+        }
         header("NEW CAMPAIGN", "Start a new flight?", "This replaces medals and upgrades on this device. Your settings stay.")
         canvas.wrap(
             if (readOnly) {

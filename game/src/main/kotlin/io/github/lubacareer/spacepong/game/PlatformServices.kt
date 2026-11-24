@@ -27,6 +27,9 @@ data class GameDiagnostics(
     val rightPulseCooldown: Double = 0.0,
     val tutorialStep: Int = 0,
     val tutorialGhostY: Double = 360.0,
+    val buildingLives: Int = 0,
+    val buildingScore: Int = 0,
+    val buildingPaddleX: Double = 0.0,
 )
 
 /** Read-only screen-pixel hit bounds, with a top-left origin, for accessibility/testing adapters. */
