@@ -10,7 +10,7 @@ import io.github.lubacareer.spacepong.simulation.Arena
 
 internal class BrickPlaySession(
     levelIndex: Int,
-    private val onFeedback: (String, Boolean?) -> Unit = { _, _ -> },
+    private val onFeedback: (SoundEffect, Boolean?) -> Unit = { _, _ -> },
 ) {
     private val engine = BrickEngine(levelIndex)
     private val arena = BrickArenaRenderer(levelIndex, BrickBuildings.levels[levelIndex].name)
@@ -19,6 +19,7 @@ internal class BrickPlaySession(
     val lives get() = engine.lives
     val paddleX get() = engine.paddleX
     val phaseName get() = engine.phase.name
+    val paused get() = engine.phase == BrickPhase.PAUSED
     val won: Boolean?
         get() = when (engine.phase) {
             BrickPhase.WON -> true
@@ -43,14 +44,14 @@ internal class BrickPlaySession(
             when (event) {
                 BrickEvent.BRICK_HIT -> {
                     arena.impact(engine.ballX.toFloat(), engine.ballY.toFloat())
-                    onFeedback("hit", null)
+                    onFeedback(SoundEffect.HIT, null)
                 }
-                BrickEvent.PADDLE_HIT -> onFeedback("hit", false)
-                BrickEvent.WALL_HIT -> onFeedback("hit", null)
-                BrickEvent.PICKUP, BrickEvent.SHIELD_SAVE -> onFeedback("pulse", false)
-                BrickEvent.LIFE_LOST -> onFeedback("goal", true)
+                BrickEvent.PADDLE_HIT -> onFeedback(SoundEffect.HIT, false)
+                BrickEvent.WALL_HIT -> onFeedback(SoundEffect.HIT, null)
+                BrickEvent.PICKUP, BrickEvent.SHIELD_SAVE -> onFeedback(SoundEffect.PULSE, false)
+                BrickEvent.LIFE_LOST -> onFeedback(SoundEffect.GOAL, true)
                 BrickEvent.LOST -> Unit // The final miss already emitted LIFE_LOST.
-                BrickEvent.WON -> onFeedback("victory", true)
+                BrickEvent.WON -> onFeedback(SoundEffect.VICTORY, true)
             }
         }
     }
@@ -88,6 +89,8 @@ internal class BrickPlaySession(
     fun up(pointer: Int, x: Float, y: Float): Boolean {
         if (!drag(pointer, x, y)) return false
         if (tapCandidate && engine.phase == BrickPhase.DOCKED) launchPending = true
+        // Without a held arrow, retain the last drag position for gestures released between simulation ticks.
+        if (left || right) target = null
         owner = null
         tapCandidate = false
         return true
@@ -106,11 +109,11 @@ internal class BrickPlaySession(
         when (keycode) {
             Input.Keys.LEFT -> {
                 left = true
-                target = null
+                if (owner == null) target = null
             }
             Input.Keys.RIGHT -> {
                 right = true
-                target = null
+                if (owner == null) target = null
             }
             Input.Keys.SPACE -> {
                 if (!spaceHeld && engine.phase == BrickPhase.DOCKED) launchPending = true

@@ -110,9 +110,16 @@ class AndroidSmokeTest {
             assertEquals("DOCKED", docked.matchPhase)
             assertEquals(3, docked.buildingLives)
             assertTrue(device.swipe(device.displayWidth / 3, device.displayHeight / 2, device.displayWidth / 2, device.displayHeight / 2, 18))
-            val moved = onGame { app.game.diagnostics() }
-            assertTrue("Horizontal drag should move the docked paddle", moved.buildingPaddleX > docked.buildingPaddleX + 20)
+            val movementDeadline = SystemClock.uptimeMillis() + 5000
+            val minimumX = docked.buildingPaddleX + 20
+            var moved = onGame { app.game.diagnostics() }
+            while (moved.page == "MATCH" && moved.matchPhase == "DOCKED" && moved.buildingPaddleX <= minimumX && SystemClock.uptimeMillis() < movementDeadline) {
+                SystemClock.sleep(50)
+                moved = onGame { app.game.diagnostics() }
+            }
+            assertEquals("MATCH", moved.page)
             assertEquals("DOCKED", moved.matchPhase)
+            assertTrue("Horizontal drag should move the docked paddle: $docked -> $moved", moved.buildingPaddleX > minimumX)
             awaitWindowFocus(app)
             assertTrue(device.click(device.displayWidth / 2, device.displayHeight * 2 / 3))
             val deadline = SystemClock.uptimeMillis() + 5000

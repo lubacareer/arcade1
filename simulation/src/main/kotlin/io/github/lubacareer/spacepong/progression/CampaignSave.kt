@@ -1,5 +1,6 @@
 package io.github.lubacareer.spacepong.progression
 
+import io.github.lubacareer.spacepong.bricks.BrickBuildings
 import java.util.Collections
 
 enum class UpgradeTrack { HEIGHT, SPEED, PULSE }
@@ -57,18 +58,18 @@ data class GameSettings(
 /**
  * A complete committed campaign snapshot. Credits and unlocks are derived, so a
  * victory cannot persist its reward separately from the medals which earned it.
- * Brick Buildings keeps separate winning scores, with zero marking an uncleared
- * building. Both lists are defensively copied, including when callers use copy().
+ * A building's stable ID is present only after a win. Scores and medals are
+ * defensively copied, including when callers use copy().
  */
 class CampaignSave(
     bestMedals: List<Int> = listOf(0, 0, 0, 0),
     val upgrades: UpgradeRanks = UpgradeRanks(),
     val tutorialSeen: Boolean = false,
     val settings: GameSettings = GameSettings(),
-    brickBestScores: List<Int> = List(BUILDING_COUNT) { 0 },
+    brickBestScores: Map<String, Int> = emptyMap(),
 ) {
     val bestMedals: List<Int> = Collections.unmodifiableList(ArrayList(bestMedals))
-    val brickBestScores: List<Int> = Collections.unmodifiableList(ArrayList(brickBestScores))
+    val brickBestScores: Map<String, Int> = Collections.unmodifiableMap(LinkedHashMap(brickBestScores))
 
     init {
         require(this.bestMedals.size == ENCOUNTER_COUNT) { "A chapter has four encounters." }
@@ -77,10 +78,9 @@ class CampaignSave(
             "Encounters must be completed in chapter order."
         }
         require(upgrades.spentCredits <= this.bestMedals.sum()) { "Upgrade spending exceeds earned medals." }
-        require(this.brickBestScores.size == BUILDING_COUNT && this.brickBestScores.all { it >= 0 }) {
-            "Expected six nonnegative building scores."
+        require(this.brickBestScores.all { (id, score) -> id.isNotBlank() && score > 0 }) {
+            "Building records require a nonblank ID and a positive winning score."
         }
-        require(this.brickBestScores.dropWhile { it > 0 }.all { it == 0 }) { "Buildings must be cleared in order." }
     }
 
     val credits: Int get() = bestMedals.sum() - upgrades.spentCredits
@@ -91,9 +91,9 @@ class CampaignSave(
         return encounter == 0 || bestMedals[encounter - 1] > 0
     }
 
-    fun isBuildingUnlocked(building: Int): Boolean {
-        require(building in brickBestScores.indices) { "Unknown building." }
-        return building == 0 || brickBestScores[building - 1] > 0
+    fun isBuildingUnlocked(id: String, displayOrder: List<String> = BrickBuildings.ids): Boolean {
+        require(id in displayOrder) { "Unknown building." }
+        return id in brickBestScores || id == displayOrder.firstOrNull { it !in brickBestScores }
     }
 
     fun copy(
@@ -101,7 +101,7 @@ class CampaignSave(
         upgrades: UpgradeRanks = this.upgrades,
         tutorialSeen: Boolean = this.tutorialSeen,
         settings: GameSettings = this.settings,
-        brickBestScores: List<Int> = this.brickBestScores,
+        brickBestScores: Map<String, Int> = this.brickBestScores,
     ): CampaignSave = CampaignSave(bestMedals, upgrades, tutorialSeen, settings, brickBestScores)
 
     override fun equals(other: Any?): Boolean = other is CampaignSave &&
@@ -120,7 +120,6 @@ class CampaignSave(
 
     companion object {
         const val ENCOUNTER_COUNT = 4
-        const val BUILDING_COUNT = 6
     }
 }
 
@@ -148,16 +147,14 @@ object CampaignProgression {
 
     fun respec(save: CampaignSave): CampaignSave = save.copy(upgrades = UpgradeRanks())
 
-    fun recordBrickVictory(save: CampaignSave, building: Int, score: Int): CampaignSave {
-        require(save.isBuildingUnlocked(building)) { "Building is locked." }
+    fun recordBrickVictory(save: CampaignSave, id: String, score: Int): CampaignSave {
+        require(save.isBuildingUnlocked(id)) { "Building is locked." }
         require(score > 0) { "Clearing a building must earn a positive score." }
-        if (score <= save.brickBestScores[building]) return save
-        val improved = save.brickBestScores.toMutableList()
-        improved[building] = score
-        return save.copy(brickBestScores = improved)
+        if (score <= (save.brickBestScores[id] ?: 0)) return save
+        return save.copy(brickBestScores = save.brickBestScores + (id to score))
     }
 
     fun resetClassic(save: CampaignSave): CampaignSave = CampaignSave(settings = save.settings, brickBestScores = save.brickBestScores)
 
-    fun resetBricks(save: CampaignSave): CampaignSave = save.copy(brickBestScores = List(CampaignSave.BUILDING_COUNT) { 0 })
+    fun resetBricks(save: CampaignSave): CampaignSave = save.copy(brickBestScores = emptyMap())
 }

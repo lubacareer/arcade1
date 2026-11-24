@@ -215,7 +215,9 @@ class BrickEngineTest {
         val stepDistance = initialHeight - game.drops.single().y
         var steps = 0
         while (steps++ < 120 && game.drops.single().y - BrickEngine.DROP_RADIUS > paddleTop + stepDistance) game.advance(tick)
-        game.ball(30.0, 5.0, 0.0, -3000.0)
+        val catchTime = (game.drops.single().y - BrickEngine.DROP_RADIUS - paddleTop) / BrickEngine.DROP_SPEED
+        val drainTime = catchTime + tick / 4
+        game.ball(30.0, 5.0, 0.0, -(5.0 + BrickEngine.BALL_RADIUS) / drainTime)
         game.advance(tick)
         assertEquals(3, game.lives)
         assertFalse(game.shield)

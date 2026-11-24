@@ -41,6 +41,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private var router = TouchRouter(false)
     private var building: BrickPlaySession? = null
     private var selectedBuilding = 0
+    private var brickClockReady = false
     private var buildingResult: BuildingResult? = null
     private var local = false
     private var selectedEncounter = 0
@@ -96,9 +97,10 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
 
     override fun render() {
         if (!initialized) return
-        val delta = Gdx.graphics.deltaTime.coerceIn(0f, .1f)
+        val frameDelta = Gdx.graphics.deltaTime
+        val delta = frameDelta.coerceIn(0f, .1f)
         elapsed += delta
-        updateMatch(delta)
+        updateMatch(delta, frameDelta)
         Gdx.gl.glClearColor(.023f, .051f, .106f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
         viewport.apply()
@@ -146,13 +148,25 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
 
     private fun matchButtons(): List<MenuButton> = if (tutorial > 0) listOf(arena.pauseButton, skipTutorial) else listOf(arena.pauseButton)
 
-    private fun updateMatch(delta: Float) {
+    private fun updateMatch(delta: Float, frameDelta: Float) {
         if (flow.page != Page.MATCH) return
         building?.let { session ->
-            session.update(delta)
+            // The first frame after start or resume can include time on the menu.
+            if (!brickClockReady) {
+                brickClockReady = true
+                return
+            }
+            session.update(frameDelta)
+            if (session.paused) {
+                pauseForInterruption()
+                return
+            }
             session.won?.let { won ->
                 buildingResult = BuildingResult(selectedBuilding, won, session.score)
-                if (won) persist(CampaignProgression.recordBrickVictory(save, selectedBuilding, session.score))
+                if (won) {
+                    val id = BrickBuildings.levels[selectedBuilding].id
+                    persist(CampaignProgression.recordBrickVictory(save, id, session.score))
+                }
                 clearInput()
                 flow.show(Page.RESULTS)
             }
@@ -209,7 +223,8 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private fun axis(positive: Int, negative: Int) = (if (heldKeys[positive]) 1.0 else 0.0) - (if (heldKeys[negative]) 1.0 else 0.0)
 
     private fun startBuilding(index: Int) {
-        if (pendingSave != null || readOnly || !save.isBuildingUnlocked(index)) {
+        val id = BrickBuildings.levels[index].id
+        if (pendingSave != null || readOnly || !save.isBuildingUnlocked(id)) {
             notice = commits.error ?: notice ?: "This building is unavailable."
             openMenu(Page.BUILDINGS)
             return
@@ -281,7 +296,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private fun finishTutorial() {
         drill = null
         val saved = persist(save.copy(tutorialSeen = true))
-        audio.effect("pulse", save.settings)
+        audio.effect(SoundEffect.PULSE, save.settings)
         clearInput()
         if (saved) engine?.resume() else flow.show(Page.PAUSE)
         runner?.clear()
@@ -290,13 +305,13 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     private fun onMatchEvent(event: MatchEvent) {
         arena.event(event, save.settings)
         when (event.kind) {
-            MatchEventKind.PADDLE_HIT, MatchEventKind.BUMPER_HIT, MatchEventKind.WALL_HIT -> audio.effect("hit", save.settings)
-            MatchEventKind.PULSE_ARMED -> audio.effect("pulse", save.settings)
+            MatchEventKind.PADDLE_HIT, MatchEventKind.BUMPER_HIT, MatchEventKind.WALL_HIT -> audio.effect(SoundEffect.HIT, save.settings)
+            MatchEventKind.PULSE_ARMED -> audio.effect(SoundEffect.PULSE, save.settings)
             MatchEventKind.GOAL -> {
-                audio.effect("goal", save.settings)
+                audio.effect(SoundEffect.GOAL, save.settings)
                 if (save.settings.haptics) platform.haptic(true)
             }
-            MatchEventKind.MATCH_FINISHED -> audio.effect("victory", save.settings)
+            MatchEventKind.MATCH_FINISHED -> audio.effect(SoundEffect.VICTORY, save.settings)
         }
         if (event.kind == MatchEventKind.PADDLE_HIT && event.side == Side.LEFT && save.settings.haptics) platform.haptic(false)
     }
@@ -500,6 +515,7 @@ class SpacePongGame(private val platform: PlatformServices) : ApplicationAdapter
     }
 
     private fun clearInput() {
+        brickClockReady = false
         heldKeys.fill(false)
         building?.clearInput()
         router.cancelAll()

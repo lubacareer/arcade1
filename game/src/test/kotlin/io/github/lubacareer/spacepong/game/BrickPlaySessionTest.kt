@@ -57,9 +57,11 @@ class BrickPlaySessionTest {
         play.keyDown(Input.Keys.RIGHT)
         play.pause()
         assertEquals("PAUSED", play.phaseName)
+        assertTrue(play.paused)
         assertFalse(play.keyDown(Input.Keys.SPACE))
         play.update(.08f)
         play.resume()
+        assertFalse(play.paused)
         play.update(.08f)
         assertEquals(origin, play.paddleX)
         assertEquals("DOCKED", play.phaseName)
@@ -84,8 +86,49 @@ class BrickPlaySessionTest {
         assertEquals("PLAYING", play.phaseName)
     }
 
+    @Test fun `a held arrow resumes immediately after an intervening tap`() {
+        play.keyDown(Input.Keys.LEFT)
+        play.update(.05f)
+        val beforeTouch = play.paddleX
+        play.down(0, 300f, 100f)
+        play.up(0, 300f, 100f)
+        play.update(.05f)
+        assertTrue(play.paddleX < beforeTouch)
+        assertEquals("PLAYING", play.phaseName)
+    }
+
+    @Test fun `a key repeat cannot interrupt the captured drag and a held arrow resumes on release`() {
+        val origin = play.paddleX
+        play.keyDown(Input.Keys.RIGHT)
+        play.down(1, 600f, 90f)
+        play.drag(1, 525f, 90f)
+        play.keyDown(Input.Keys.RIGHT)
+        play.update(.05f)
+        val duringDrag = play.paddleX
+        assertTrue(duringDrag < origin)
+        play.up(1, 525f, 90f)
+        play.update(.05f)
+        assertTrue(play.paddleX > duringDrag)
+        assertEquals("DOCKED", play.phaseName)
+    }
+
+    @Test fun `cancelling a drag with both arrows down respects remaining held direction`() {
+        val origin = play.paddleX
+        play.keyDown(Input.Keys.RIGHT)
+        play.keyDown(Input.Keys.LEFT)
+        play.down(1, 300f, 100f)
+        play.drag(1, 390f, 100f)
+        play.cancel(1)
+        play.update(.05f)
+        assertEquals(origin, play.paddleX)
+        play.keyUp(Input.Keys.RIGHT)
+        play.update(.05f)
+        assertTrue(play.paddleX < origin)
+        assertEquals("DOCKED", play.phaseName)
+    }
+
     @Test fun `each lost life emits exactly one impact including the end of the attempt`() {
-        val impacts = mutableListOf<String>()
+        val impacts = mutableListOf<SoundEffect>()
         val session = BrickPlaySession(0) { sound, strong ->
             if (strong == true) impacts += sound
         }
@@ -102,6 +145,6 @@ class BrickPlaySessionTest {
             session.keyUp(steer)
         }
         assertEquals(false, session.won)
-        assertEquals(listOf("goal", "goal", "goal"), impacts)
+        assertEquals(List(3) { SoundEffect.GOAL }, impacts)
     }
 }

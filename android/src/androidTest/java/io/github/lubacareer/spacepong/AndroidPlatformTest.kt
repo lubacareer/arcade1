@@ -105,6 +105,33 @@ class AndroidPlatformTest {
     }
 
     @Test
+    fun upgradesBrickScoresOnTheDeviceFilesystem() {
+        ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
+            lateinit var app: AndroidLauncher
+            scenario.onActivity { app = it }
+            val directory = Files.createTempDirectory(app.cacheDir.toPath(), "building-save-")
+            try {
+                val primary = directory.resolve("campaign.json")
+                val legacy = """{"version":2,"bestMedals":[3,0,0,0],"upgrades":{"height":1,"speed":0,"pulse":0},"brickBestScores":[1000,2200,0,0,0,0]}"""
+                Files.write(primary, legacy.toByteArray(Charsets.UTF_8))
+                val repo = SaveRepository(directory)
+                val loaded = repo.load().save
+                assertEquals(mapOf("outpost" to 1000, "hangar" to 2200), loaded.brickBestScores)
+                assertEquals(2, loaded.credits)
+
+                val updated = loaded.copy(settings = loaded.settings.copy(muted = true))
+                repo.save(updated)
+
+                assertTrue(String(Files.readAllBytes(primary), Charsets.UTF_8).contains("\"version\":3"))
+                assertEquals(legacy, String(Files.readAllBytes(directory.resolve("campaign.backup.json")), Charsets.UTF_8))
+                assertEquals(updated, SaveRepository(directory).load().save)
+            } finally {
+                directory.toFile().deleteRecursively()
+            }
+        }
+    }
+
+    @Test
     fun deviceFilesystemSupportsFlushedCampaignReplacements() {
         ActivityScenario.launch(AndroidLauncher::class.java).use { scenario ->
             lateinit var app: AndroidLauncher

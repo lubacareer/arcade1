@@ -44,8 +44,14 @@ class BrickEngine internal constructor(val bricks: List<Brick>) {
     fun advance(deltaSeconds: Double, targetX: Double? = null, axis: Double = 0.0, launch: Boolean = false) {
         if (!isActive() || deltaSeconds < 0 || !deltaSeconds.isFinite()) return
         launchQueued = launchQueued || (launch && phase == BrickPhase.DOCKED)
-        accumulator = min(accumulator + deltaSeconds, MAX_STEPS * Arena.STEP_SECONDS)
-        while (accumulator + CLOCK_EPSILON >= Arena.STEP_SECONDS && isActive()) {
+        accumulator += deltaSeconds
+        if (accumulator > MAX_PENDING_SECONDS) {
+            pause()
+            return
+        }
+        var steps = 0
+        while (steps < MAX_STEPS && accumulator + CLOCK_EPSILON >= Arena.STEP_SECONDS && isActive()) {
+            steps++
             accumulator = (accumulator - Arena.STEP_SECONDS).coerceAtLeast(0.0)
             step(targetX, axis)
             launchQueued = false
@@ -63,9 +69,10 @@ class BrickEngine internal constructor(val bricks: List<Brick>) {
             axis.isFinite() -> axis.coerceIn(-1.0, 1.0) * limit
             else -> 0.0
         }
-        paddleX = clampPaddle(startX + movement)
+        val target = clampPaddle(startX + movement)
         if (phase == BrickPhase.DOCKED) {
-            ballX = paddleX
+            paddleX = target
+            ballX = target
             ballY = SERVE_Y
             if (!launchQueued) return
             phase = BrickPhase.PLAYING
@@ -73,9 +80,10 @@ class BrickEngine internal constructor(val bricks: List<Brick>) {
             velocityX = BALL_SPEED * sin(angle)
             velocityY = BALL_SPEED * cos(angle)
         }
-        wideSeconds = (wideSeconds - dt).coerceAtLeast(0.0)
-        advanceDrops(dt)
-        sweep.advance(dt, startX, (paddleX - startX) / dt)
+        sweep.advance(dt, target)
+        for (index in falling.indices.reversed()) {
+            if (falling[index].y < -DROP_RADIUS) falling.removeAt(index)
+        }
     }
 
     fun pause() {
@@ -134,29 +142,28 @@ class BrickEngine internal constructor(val bricks: List<Brick>) {
         if (phase == BrickPhase.LOST) emit(BrickEvent.LOST)
     }
 
-    private fun advanceDrops(dt: Double) {
-        for (index in falling.indices.reversed()) {
-            val drop = falling[index]
-            val oldY = drop.y
-            drop.y -= DROP_SPEED * dt
-            val reachesPaddle = oldY + DROP_RADIUS >= PADDLE_Y - PADDLE_HEIGHT / 2 &&
-                drop.y - DROP_RADIUS <= PADDLE_Y + PADDLE_HEIGHT / 2 &&
-                abs(drop.x - paddleX) <= paddleWidth / 2 + DROP_RADIUS
-            if (reachesPaddle) {
-                when (drop.power) {
-                    BrickPower.WIDE_PADDLE -> {
-                        wideSeconds = WIDE_DURATION
-                        paddleX = clampPaddle(paddleX)
-                    }
-                    BrickPower.SHIELD -> shield = true
-                }
-                emit(BrickEvent.PICKUP)
-            }
-            if (reachesPaddle || drop.y < -DROP_RADIUS) falling.removeAt(index)
+    internal fun moveActors(seconds: Double, paddleVelocity: Double, moveBall: Boolean) {
+        if (moveBall) {
+            ballX += velocityX * seconds
+            ballY += velocityY * seconds
         }
+        paddleX = clampPaddle(paddleX + paddleVelocity * seconds)
+        for (index in falling.indices) falling[index].y -= DROP_SPEED * seconds
+        wideSeconds = (wideSeconds - seconds).coerceAtLeast(0.0)
     }
 
-    private fun clampPaddle(x: Double) = x.coerceIn(paddleWidth / 2, Arena.WIDTH - paddleWidth / 2)
+    internal fun catchDrop(index: Int) {
+        when (falling.removeAt(index).power) {
+            BrickPower.WIDE_PADDLE -> {
+                wideSeconds = WIDE_DURATION
+                paddleX = clampPaddle(paddleX)
+            }
+            BrickPower.SHIELD -> shield = true
+        }
+        emit(BrickEvent.PICKUP)
+    }
+
+    internal fun clampPaddle(x: Double) = x.coerceIn(paddleWidth / 2, Arena.WIDTH - paddleWidth / 2)
     internal fun emit(event: BrickEvent) = eventListener?.invoke(event)
 
     companion object {
@@ -171,9 +178,10 @@ class BrickEngine internal constructor(val bricks: List<Brick>) {
         private const val PADDLE_SPEED = 1100.0
         private const val BALL_SPEED = 575.0
         private const val MAX_RETURN_ANGLE = 65.0
-        private const val MAX_STEPS = 8
+        private const val MAX_STEPS = 12
+        private const val MAX_PENDING_SECONDS = 0.25
         private const val CLOCK_EPSILON = 1e-10
-        private const val DROP_SPEED = 200.0
+        internal const val DROP_SPEED = 200.0
         const val DROP_RADIUS = 10.0
         private const val WIDE_DURATION = 8.0
         private const val BASE_POINTS = 100

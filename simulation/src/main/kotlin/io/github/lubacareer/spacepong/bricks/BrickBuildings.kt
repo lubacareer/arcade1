@@ -22,7 +22,7 @@ class BrickDrop internal constructor(val x: Double, y: Double, val power: BrickP
         internal set
 }
 
-class BrickLevel internal constructor(val name: String, vararg grid: String) {
+class BrickLevel internal constructor(val id: String, val name: String, vararg grid: String) {
     val rows: List<String> = grid.toList()
 
     /** Rows are authored roof-first. A fresh set of bricks belongs to each attempt. */
@@ -56,6 +56,7 @@ class BrickLevel internal constructor(val name: String, vararg grid: String) {
 object BrickBuildings {
     val levels = listOf(
         BrickLevel(
+            "outpost",
             "Outpost",
             "....#....",
             "...###...",
@@ -64,6 +65,7 @@ object BrickBuildings {
             "###...###",
         ),
         BrickLevel(
+            "hangar",
             "Hangar",
             "....#####....",
             "..#########..",
@@ -73,6 +75,7 @@ object BrickBuildings {
             "##.........##",
         ),
         BrickLevel(
+            "twin_towers",
             "Twin Towers",
             "..#.......#..",
             ".###.....###.",
@@ -83,6 +86,7 @@ object BrickBuildings {
             "#####...#####",
         ),
         BrickLevel(
+            "observatory",
             "Observatory",
             "......###......",
             "....#######....",
@@ -94,6 +98,7 @@ object BrickBuildings {
             "..####...####..",
         ),
         BrickLevel(
+            "launch_gantry",
             "Launch Gantry",
             "...#.............",
             "..###......#.....",
@@ -106,6 +111,7 @@ object BrickBuildings {
             ".#####.#########.",
         ),
         BrickLevel(
+            "orbital_citadel",
             "Orbital Citadel",
             ".........#.........",
             "...#....###....#...",
@@ -119,4 +125,7 @@ object BrickBuildings {
             "#####.........#####",
         ),
     )
+
+    /** Display order can change independently of the permanent save IDs. */
+    val ids = levels.map { it.id }
 }

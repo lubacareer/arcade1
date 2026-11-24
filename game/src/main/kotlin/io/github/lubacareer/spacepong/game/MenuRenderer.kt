@@ -151,8 +151,8 @@ class MenuRenderer(private val canvas: Canvas) {
         BrickBuildings.levels.forEachIndexed { index, level ->
             val x = 64f + (index % 3) * 390f
             val y = 324f - (index / 3) * 174f
-            val unlocked = save.isBuildingUnlocked(index)
-            val best = save.brickBestScores[index]
+            val unlocked = save.isBuildingUnlocked(level.id)
+            val best = save.brickBestScores[level.id] ?: 0
             val status = when {
                 !unlocked -> "LOCKED"
                 best > 0 -> "BEST  $best"
@@ -163,27 +163,27 @@ class MenuRenderer(private val canvas: Canvas) {
             canvas.text(status, x + 124f, y + 140f, 18f, if (unlocked) Palette.amber else Palette.muted, true)
         }
         button("home", "MAIN MENU", 64f, 40f, 280f)
-        if (save.brickBestScores.any { it > 0 }) button("new-bricks", "RESET BUILDINGS", 896f, 40f, 314f, enabled = !readOnly)
+        if (save.brickBestScores.isNotEmpty()) button("new-bricks", "RESET BUILDINGS", 896f, 40f, 314f, enabled = !readOnly)
     }
 
     private fun buildingResults(result: BuildingResult, save: CampaignSave) {
-        val name = BrickBuildings.levels[result.building].name
-        canvas.centered(name, 640f, 619f, 29f, Palette.cyan, true)
-        val last = result.building == BrickBuildings.levels.lastIndex
+        val level = BrickBuildings.levels[result.building]
+        canvas.centered(level.name, 640f, 619f, 29f, Palette.cyan, true)
+        val best = save.brickBestScores[level.id]
+        val next = BrickBuildings.levels.indexOfFirst { it.id !in save.brickBestScores }
         val title = when {
             !result.won -> "Out of lives"
-            last -> "All six buildings cleared!"
+            next < 0 -> "All buildings cleared!"
             else -> "Building cleared!"
         }
         canvas.centered(title, 640f, 529f, 56f, Palette.ink, true)
         canvas.centered("Score   ${result.score}", 640f, 427f, 36f, Palette.ink, true)
-        val best = save.brickBestScores[result.building]
-        if (best > 0) canvas.centered("Best clear   $best", 640f, 364f, 25f, Palette.amber)
-        if (result.won && !last) {
-            button("building-${result.building + 1}", "NEXT BUILDING", 654f, 207f, 330f, enabled = save.isBuildingUnlocked(result.building + 1), primary = true)
+        if (best != null) canvas.centered("Best clear   $best", 640f, 364f, 25f, Palette.amber)
+        if (result.won && next >= 0 && next != result.building) {
+            button("building-$next", "NEXT BUILDING", 654f, 207f, 330f, primary = true)
             button("retry", "PLAY AGAIN", 298f, 207f, 330f)
         } else {
-            button("retry", "TRY AGAIN", 472f, 207f, 336f, primary = !result.won)
+            button("retry", if (result.won) "PLAY AGAIN" else "TRY AGAIN", 472f, 207f, 336f, primary = !result.won)
         }
         button("buildings", "BUILDING SELECT", 472f, 89f, 336f)
     }
